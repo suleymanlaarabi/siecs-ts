@@ -55,7 +55,7 @@ try {
       new Response(browser.stdout).text(),
       new Response(browser.stderr).text(),
     ]);
-    const match = dom.match(/QUERY_BENCH:(\[[^<]+\])/);
+    const match = dom.match(/SIECS_BENCH:({[^<]+})/);
 
     if (exitCode !== 0 || !match) {
       process.stderr.write(stderr);
@@ -63,7 +63,9 @@ try {
     }
 
     const results = JSON.parse(match[1]!);
-    console.table(results);
+    console.table(results.query);
+    console.table([results.set]);
+    console.table([results.system]);
   } finally {
     server.stop(true);
   }

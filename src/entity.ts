@@ -24,7 +24,7 @@ export function set<ComponentType extends Component>(
 }
 
 export class Entity {
-  private entity: bigint;
+  entity: bigint;
 
   constructor(entity: bigint) {
     this.entity = entity;

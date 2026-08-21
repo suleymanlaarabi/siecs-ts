@@ -1,4 +1,4 @@
-import { component, entity, query, write } from "..";
+import { component, entity, query, write, progress, system } from "..";
 
 const Position = component("Position", {
   x: "f32",
@@ -14,14 +14,19 @@ entity().set(Position, { x: 0, y: 0 }).set(Velocity, { x: 1, y: 1 });
 entity().add(Position).add(Velocity);
 entity().add(Position).add(Velocity);
 
-const a = entity();
-
-query({ position: write(Position), velocity: Velocity }).each(
+system(
+  "Move",
+  {
+    position: write(Position),
+    velocity: Velocity,
+  },
   ({ position, velocity }) => {
     position.x += velocity.x;
     position.y += velocity.y;
   },
 );
+
+progress();
 
 query({ position: Position }).each(({ position }) => {
   console.log(position.x, position.y);

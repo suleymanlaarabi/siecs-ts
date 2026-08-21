@@ -34,7 +34,7 @@ if (declarations.exitCode !== 0) {
   throw new Error(`tsc failed with exit code ${declarations.exitCode}`);
 }
 
-for (const internal of ["runtime", "set", "view"]) {
+for (const internal of ["runtime", "set"]) {
   rmSync(join(output, "src", `${internal}.d.ts`));
 }
 

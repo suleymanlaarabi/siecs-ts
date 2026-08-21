@@ -11,8 +11,13 @@ test("retains all SIECS exports without a manual list", async () => {
   expect(typeof module._ecs_query_init).toBe("function");
   expect(typeof module._ecs_system_init).toBe("function");
   expect(typeof module._ecs_resource_init).toBe("function");
+  expect(typeof module._ecs_modified_cid).toBe("function");
   expect(typeof module._ecs_iter_next).toBe("function");
   expect(typeof module._siecs_ts_query_init).toBe("function");
   expect(typeof module._siecs_ts_query_iter).toBe("function");
   expect(typeof module._siecs_ts_ensure_cid).toBe("function");
+  expect(typeof module._siecs_ts_resource_init).toBe("function");
+  expect(typeof module._siecs_ts_system_init).toBe("function");
+  expect(typeof module._siecs_ts_observer_init).toBe("function");
+  expect(typeof module.addFunction).toBe("function");
 });

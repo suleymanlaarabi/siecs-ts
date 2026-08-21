@@ -11,7 +11,7 @@ export function genericQuery(descriptor: Record<string, number>) {
     wasm.HEAPU32[(termsPointer >> 2) + index] = entries[index]![1];
   }
 
-  const query = wasm._siecs_ts_query_init(termsPointer, entries.length);
+  const query = wasm._siecs_ts_query_init(termsPointer, entries.length, 0, 0);
   wasm._free(termsPointer);
 
   const entity = new Entity(0n);

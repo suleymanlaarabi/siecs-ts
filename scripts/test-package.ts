@@ -25,6 +25,7 @@ function run(command: string[], cwd: string) {
   });
 
   if (result.exitCode !== 0) {
+    process.stderr.write(result.stdout.toString());
     process.stderr.write(result.stderr.toString());
     throw new Error(`${command.join(" ")} failed with exit code ${result.exitCode}`);
   }
@@ -54,12 +55,18 @@ try {
   );
 
   const smoke = `
-    import { component, entity, query } from "siecs-ts";
+    import { component, entity, observer, OnSet, query, resource, runSystem, system, write } from "siecs-ts";
     const Position = component("PackagePosition", { x: "f32", y: "f32" });
-    entity().set(Position, { x: 10, y: 20 });
+    const Time = resource("PackageTime", { delta: "f32" }, { delta: 2 });
+    const object = entity().set(Position, { x: 10, y: 20 });
+    let observed = 0;
+    observer(OnSet, { position: Position }, ({ position }) => observed = position.x);
+    object.set(Position, { x: 11, y: 20 });
+    const Move = system("PackageMove", { position: write(Position), time: Time }, (row) => row.position.x += row.time.delta);
+    runSystem(Move);
     let valid = false;
     query({ position: Position }).each(({ position }) => {
-      valid = position.x === 10 && position.y === 20;
+      valid = position.x === 13 && position.y === 20 && observed === 11;
     });
     if (!valid) throw new Error("installed package returned invalid data");
   `;

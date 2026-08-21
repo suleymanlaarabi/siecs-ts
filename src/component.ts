@@ -110,7 +110,7 @@ function fieldDeclaration(name: string, field: ComponentField): string {
   return `${type} ${name};`;
 }
 
-function schemaSource(schema: ComponentSchema | undefined): string {
+export function schemaSource(schema: ComponentSchema | undefined): string {
   return `{ ${Object.entries(schema ?? {})
     .map(([name, field]) => fieldDeclaration(name, field))
     .join(" ")} }`;
@@ -136,7 +136,7 @@ export function component(
   return registered;
 }
 
-function reflectType(type: bigint): ReflectedTypeLayout {
+export function reflectType(type: bigint): ReflectedTypeLayout {
   const cached = typeLayouts.get(type);
   if (cached) {
     return cached;

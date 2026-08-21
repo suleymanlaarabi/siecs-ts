@@ -10,11 +10,63 @@ export type {
   SireflectTypes,
 } from "./src/component.js";
 export { add, entity, Entity, has, remove, set } from "./src/entity.js";
-export { filter, query, without, write } from "./src/query.js";
+export { filter, without, write } from "./src/access.js";
 export type {
+  AccessDescriptor,
+  AccessRow,
+  AccessTarget,
+  DeepReadonly,
   Filter,
-  Query,
-  QueryRow,
+  ObserverRow,
+  SystemContext,
   Without,
   Write,
-} from "./src/query.js";
+} from "./src/access.js";
+export { query } from "./src/query.js";
+export type { Query, QueryRow } from "./src/query.js";
+export { getResource, resource, setResource } from "./src/resource.js";
+export type { Resource, ResourceValue } from "./src/resource.js";
+export {
+  disableSystem,
+  enableSystem,
+  OnLoad,
+  OnRender,
+  OnUpdate,
+  phase,
+  PostLoad,
+  PostRender,
+  PostStart,
+  PostUpdate,
+  PreRender,
+  PreStart,
+  PreUpdate,
+  progress,
+  run,
+  runPhase,
+  runSystem,
+  Start,
+  system,
+} from "./src/system.js";
+export type {
+  Phase,
+  PhaseOptions,
+  System,
+  SystemOptions,
+} from "./src/system.js";
+export {
+  disableObserver,
+  emit,
+  enableObserver,
+  event,
+  observer,
+  OnAdd,
+  OnRelationRemove,
+  OnRelationSet,
+  OnRemove,
+  OnSet,
+} from "./src/observer.js";
+export type {
+  Event,
+  Observer,
+  RelationEvent,
+} from "./src/observer.js";

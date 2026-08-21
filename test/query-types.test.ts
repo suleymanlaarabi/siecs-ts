@@ -1,7 +1,18 @@
-import { component, entity, filter, query, write } from "../index.ts";
+import {
+  component,
+  entity,
+  event,
+  filter,
+  observer,
+  query,
+  resource,
+  system,
+  write,
+} from "../index.ts";
 
 const Position = component("QueryTypePosition", { x: "f32", y: "f32" });
 const Enemy = component("QueryTypeEnemy");
+const Time = resource("QueryTypeTime", { delta: "f32" }, { delta: 0 });
 
 if (false) {
   const player = entity();
@@ -23,5 +34,24 @@ if (false) {
   query({ enemy: filter(Enemy) }).each((row) => {
     // @ts-expect-error filter terms are not exposed on the row
     row.enemy;
+  });
+
+  query({ time: Time }).each((row) => {
+    // @ts-expect-error resources are readonly by default
+    row.time.delta = 1;
+    // @ts-expect-error resource-only queries have no entity
+    row.entity;
+  });
+
+  system("TypeSystem", { time: write(Time) }, (row) => {
+    row.time.delta = 1;
+    // @ts-expect-error resource-only systems have no entity
+    row.entity;
+  });
+
+  const Damage = event<{ amount: number }>();
+  observer(Damage, { position: write(Position) }, (row, payload) => {
+    row.position.x -= payload.amount;
+    row.entity;
   });
 }

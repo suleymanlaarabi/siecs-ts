@@ -28,6 +28,8 @@ try {
       "-sEXPORT_ALL=1",
       "-sWASM_BIGINT=1",
       "-sALLOW_MEMORY_GROWTH=1",
+      "-sALLOW_TABLE_GROWTH=1",
+      "-sEXPORTED_RUNTIME_METHODS=addFunction",
       "-sENVIRONMENT=web,node",
       "-sASSERTIONS=0",
       "-sSINGLE_FILE=1",

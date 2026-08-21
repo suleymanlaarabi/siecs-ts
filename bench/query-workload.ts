@@ -58,7 +58,7 @@ function nativeQuery(descriptor: Record<string, number>) {
   const terms = Object.values(descriptor);
   const pointer = wasm._malloc(terms.length * 4);
   wasm.HEAPU32.set(terms, pointer >> 2);
-  const query = wasm._siecs_ts_query_init(pointer, terms.length);
+  const query = wasm._siecs_ts_query_init(pointer, terms.length, 0, 0);
   wasm._free(pointer);
   return query;
 }
@@ -114,12 +114,14 @@ export function runQueryBenchmark(entityCount = 100_000): Result[] {
 
     for (const fieldCount of [1, 2, 4]) {
       const descriptor: Record<string, number> = {};
+      const generatedDescriptor: Record<string, ReturnType<typeof write>> = {};
       const names = ["a", "b", "c", "d"];
       for (let index = 0; index < fieldCount; index++) {
-        descriptor[names[index]!] = write(fields[index]!) as number;
+        descriptor[names[index]!] = (fields[index]! as number) | (2 << 16);
+        generatedDescriptor[names[index]!] = write(fields[index]!);
       }
 
-      const generated = query(descriptor as never) as {
+      const generated = query(generatedDescriptor) as {
         each(callback: (row: any) => void): void;
       };
       const generic = genericQuery(descriptor);
@@ -129,9 +131,13 @@ export function runQueryBenchmark(entityCount = 100_000): Result[] {
         () => generated.each(update),
         () => generic.each(update),
       );
-      const nativeTime = measure(() =>
-        wasm._siecs_ts_bench_i32(native, fieldCount),
-      );
+      const nativeRepeats = 50;
+      const nativeTime =
+        measure(() => {
+          for (let index = 0; index < nativeRepeats; index++) {
+            wasm._siecs_ts_bench_i32(native, fieldCount);
+          }
+        }) / nativeRepeats;
 
       results.push({
         archetypes,
