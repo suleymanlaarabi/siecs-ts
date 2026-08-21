@@ -1,0 +1,52 @@
+{
+  "name": "siecs-ts",
+  "version": "0.1.0",
+  "description": "Portable WebAssembly bindings for SIECS",
+  "keywords": [
+    "ecs",
+    "webassembly",
+    "wasm",
+    "typescript",
+    "game-development"
+  ],
+  "license": "MIT",
+  "author": "Suleyman Laarabi",
+  "sideEffects": true,
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build:wasm": "bun scripts/build-wasm.ts",
+    "build:package": "bun scripts/build-package.ts",
+    "build": "bun run build:wasm && bun run build:package",
+    "example:basic": "bun examples/basic.ts",
+    "test:browser": "bun run build && bun scripts/test-browser.ts",
+    "test:package": "bun run build && bun scripts/test-package.ts",
+    "bench:query": "bun bench/query.ts",
+    "bench:query:browser": "bun scripts/bench-browser.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun run build:wasm && bun test",
+    "check": "bun run build && bun run typecheck && bun test && bun scripts/test-browser.ts && bun scripts/test-package.ts",
+    "prepack": "bun run build && bun run typecheck && bun test && bun scripts/test-package.ts"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "latest"
+  }
+}
