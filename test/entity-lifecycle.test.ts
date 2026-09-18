@@ -1,5 +1,15 @@
 import { expect, test } from "bun:test";
-import { defer, entity, isAlive, kill } from "../index.ts";
+import { createEntity, defer, entity, isAlive, kill } from "../index.ts";
+
+test("createEntity returns a live raw entity id", () => {
+  const id = createEntity();
+
+  expect(typeof id).toBe("bigint");
+  expect(isAlive(id)).toBe(true);
+
+  kill(id);
+  expect(isAlive(id)).toBe(false);
+});
 
 test("reports liveness and kills through function and Entity APIs", () => {
   const first = entity();

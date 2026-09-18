@@ -12,6 +12,7 @@ export type {
 } from "./src/component.js";
 export {
   add,
+  createEntity,
   entity,
   Entity,
   has,

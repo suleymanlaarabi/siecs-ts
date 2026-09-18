@@ -25,6 +25,8 @@ export const remove = wasm._ecs_remove_cid as (
 
 export const kill = wasm._ecs_kill as (entity: bigint) => void;
 
+export const createEntity = wasm._ecs_new as () => bigint;
+
 export function isAlive(entity: bigint): boolean {
   return entity !== 0n && wasm._ecs_is_alive(entity) !== 0;
 }
@@ -107,7 +109,7 @@ export class Entity {
 }
 
 export const entity = (...components: Component<unknown, ComponentMutation>[]) => {
-  const e = new Entity(wasm._ecs_new());
+  const e = new Entity(createEntity());
   e.add(...components);
   return e;
 };
