@@ -43,3 +43,11 @@ test("runs a resource-only query once without an entity", () => {
 
   expect(calls).toBe(1);
 });
+
+test("keeps names of native resources after FFI string buffers are reused", () => {
+  resource("NativeResourceFirst", { value: "u32" }, { value: 1 });
+  const larger = resource("NativeResourceOther", { a: "u32", b: "u32" }, { a: 2, b: 3 });
+  setResource(larger, { a: 4, b: 5 });
+  expect(getResource(larger).a).toBe(4);
+  expect(getResource(larger).b).toBe(5);
+});

@@ -24,7 +24,8 @@ export {
 export { defer, deferBegin, deferEnd } from "./src/defer.js";
 export { hasRelation, relate, target, unrelate } from "./src/relation.js";
 export type { Relation } from "./src/relation.js";
-export { ChildOf, Disabled, Name } from "./src/builtins.js";
+export { Abstract, ChildOf, Disabled, IsA, Name } from "./src/builtins.js";
+export * from "./src/rendering.js";
 export { getName, setName } from "./src/name.js";
 export { filter, without, write } from "./src/access.js";
 export type {
@@ -45,6 +46,7 @@ export type { Resource, ResourceValue } from "./src/resource.js";
 export {
   disableSystem,
   enableSystem,
+  fini,
   OnLoad,
   OnRender,
   OnUpdate,
@@ -57,6 +59,7 @@ export {
   PreStart,
   PreUpdate,
   progress,
+  quit,
   run,
   runPhase,
   runSystem,

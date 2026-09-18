@@ -8,7 +8,6 @@ import {
   without,
   write,
 } from "../index.ts";
-import { wasm } from "../src/runtime.ts";
 
 test("iterates named read/write fields with filter and without terms", () => {
   const Position = component("QueryPosition", { x: "f32", y: "f32" });
@@ -52,7 +51,7 @@ test("iterates named read/write fields with filter and without terms", () => {
   });
 });
 
-test("reflects nested structs and fixed arrays directly over WASM storage", () => {
+test("reflects nested structs and fixed arrays directly over native storage", () => {
   const Vec2 = component("QueryVec2", { x: "f32", y: "f32" });
   const Transform = component("QueryTransform", {
     position: Vec2,
@@ -135,20 +134,24 @@ test("persistent queries see archetypes created after query initialization", () 
   expect(after).toBe(before + 1);
 });
 
-test("refreshes borrowed heap views after WASM memory growth between passes", () => {
+test("resolves current native storage after column growth and archetype moves", () => {
   const Value = component("QueryGrowthValue", { value: "i32" });
   const object = entity();
   object.add(Value);
   const values = query({ value: write(Value) });
 
   values.each((row) => (row.value.value = 7));
-  const previousBuffer = wasm.HEAPU8.buffer;
-  const allocation = wasm._malloc(wasm.HEAPU8.byteLength);
-  wasm._free(allocation);
-
-  expect(wasm.HEAPU8.buffer).not.toBe(previousBuffer);
+  for (let index = 0; index < 5000; index++) entity().add(Value);
+  const Moved = component("QueryGrowthMoved");
+  object.add(Moved);
   values.each((row) => {
-    expect(row.value.value).toBe(7);
-    row.value.value = 9;
+    if (row.entity.entity === object.entity) {
+      expect(row.value.value).toBe(7);
+      row.value.value = 9;
+    }
+  });
+  object.remove(Moved);
+  values.each((row) => {
+    if (row.entity.entity === object.entity) expect(row.value.value).toBe(9);
   });
 });

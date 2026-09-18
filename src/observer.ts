@@ -6,7 +6,7 @@ import {
   refreshObserverRow,
 } from "./access.js";
 import { Entity } from "./entity.js";
-import { wasm } from "./runtime.js";
+import { abi, native, read, registerCallback } from "./runtime.js";
 
 declare const eventBrand: unique symbol;
 declare const observerBrand: unique symbol;
@@ -51,7 +51,7 @@ function observerHandle(observer: Observer): ObserverHandle {
 }
 
 export function event<Payload = void>(): Event<Payload> {
-  return wasm._ecs_event() as unknown as Event<Payload>;
+  return native.ecs_event() as unknown as Event<Payload>;
 }
 
 export function observer<
@@ -73,15 +73,15 @@ export function observer<
     newTarget: 0n,
   };
   const nativeCallback = (eventPointer: number) => {
-    const entity = wasm.HEAPU64[eventPointer >> 3]!;
+    const entity = read.u64(eventPointer, abi.eventEntity);
     refreshObserverRow(plan, entity);
 
     let payload: unknown;
     if (idOfEvent === 3 || idOfEvent === 4) {
-      const trigger = wasm.HEAPU32[(eventPointer + 16) >> 2]!;
-      relationPayload.relation = wasm.HEAPU16[trigger >> 1]!;
-      relationPayload.oldTarget = wasm.HEAPU64[(trigger + 8) >> 3]!;
-      relationPayload.newTarget = wasm.HEAPU64[(trigger + 16) >> 3]!;
+      const trigger = read.ptr(eventPointer, abi.eventTrigger);
+      relationPayload.relation = read.u16(trigger, abi.relation);
+      relationPayload.oldTarget = read.u64(trigger, abi.oldTarget);
+      relationPayload.newTarget = read.u64(trigger, abi.newTarget);
       payload = relationPayload;
     } else if (idOfEvent > 4) {
       const stack = payloadStacks.get(idOfEvent);
@@ -92,15 +92,14 @@ export function observer<
       payload as PayloadOf<EventType>,
     );
   };
-  const callbackPointer = wasm.addFunction(nativeCallback, "vi");
+  const callbackPointer = registerCallback(nativeCallback);
   const components = allocateTerms(plan.componentTerms);
-  const id = wasm._siecs_ts_observer_init(
+  const id = native.siecs_ts_observer_init(
     idOfEvent,
     components,
     plan.componentTerms.length,
     callbackPointer,
   );
-  if (components) wasm._free(components);
   return { id, event: idOfEvent, enabled: true } as ObserverHandle;
 }
 
@@ -118,10 +117,10 @@ export function emit<EventType extends Event<unknown>>(
   }
   stack.push(payload);
   try {
-    wasm._ecs_observer_trigger(
+    native.ecs_observer_trigger(
       typeof entity === "bigint" ? entity : entity.entity,
       id,
-      0,
+      null,
     );
   } finally {
     stack.pop();
@@ -132,12 +131,12 @@ export function enableObserver(observer: Observer): void {
   const value = observerHandle(observer);
   if (value.enabled) return;
   value.enabled = true;
-  wasm._ecs_observer_enable(value.id);
+  native.ecs_observer_enable(value.id);
 }
 
 export function disableObserver(observer: Observer): void {
   const value = observerHandle(observer);
   if (!value.enabled) return;
   value.enabled = false;
-  wasm._ecs_observer_disable(value.id);
+  native.ecs_observer_disable(value.id);
 }

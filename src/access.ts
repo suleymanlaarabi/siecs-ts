@@ -4,15 +4,18 @@ import {
   componentLayout,
 } from "./component.js";
 import { Entity } from "./entity.js";
+import { Name } from "./builtins.js";
 import {
   type Resource,
   isResource,
   resourceId,
   resourceLayout,
   resourcePointer,
+  resourceStrings,
 } from "./resource.js";
-import { wasm } from "./runtime.js";
-import { type Cursor, createView, refreshViewHeaps } from "./view.js";
+import { ptr } from "bun:ffi";
+import { abi, native, read } from "./runtime.js";
+import { type Cursor, attachView, columnView, createView } from "./view.js";
 
 declare const writeBrand: unique symbol;
 declare const filterBrand: unique symbol;
@@ -105,6 +108,7 @@ interface ComponentField {
   id: Component;
   cursor: Cursor;
   stride: number;
+  cache: Map<number, DataView>;
 }
 
 export interface AccessPlan {
@@ -154,8 +158,8 @@ export function compileAccess(
     const { target, access } = decode(term);
     if (isResource(target)) {
       resourceTerms.push(resourceId(target) | (access << 16));
-      const cursor = createView(resourceLayout(target), access === 2);
-      cursor._base = resourcePointer(target);
+      const cursor = createView(resourceLayout(target), access === 2, false, resourceStrings(target));
+      attachView(cursor, resourcePointer(target), resourceLayout(target).size);
       row[name] = cursor;
       continue;
     }
@@ -164,10 +168,14 @@ export function compileAccess(
     componentTerms.push((component as number) | (access << 16));
     if (access < 5) {
       const layout = componentLayout(component);
-      const cursor = createView(layout, access === 2);
+      const cursor = createView(layout, access === 2, alwaysEntity, component === Name);
       row[name] = cursor;
-      componentFields.push({ id: component, cursor, stride: layout.size });
+      componentFields.push({ id: component, cursor, stride: layout.size, cache: new Map() });
     }
+  }
+
+  if (componentTerms.length > abi.componentCapacity || resourceTerms.length > abi.resourceCapacity) {
+    throw new RangeError(`Native queries support at most ${abi.componentCapacity} component and ${abi.resourceCapacity} resource terms`);
   }
 
   let entity: Entity | undefined;
@@ -179,164 +187,72 @@ export function compileAccess(
   return { componentTerms, resourceTerms, row, entity, componentFields };
 }
 
-export function allocateTerms(terms: readonly number[]): number {
-  if (!terms.length) return 0;
-  const pointer = wasm._malloc(terms.length * 4);
-  wasm.HEAPU32.set(terms, pointer >> 2);
-  return pointer;
+export function allocateTerms(terms: readonly number[]): Uint32Array | null {
+  return terms.length ? new Uint32Array(terms) : null;
 }
 
-interface RowCode {
-  locals: string;
-  batch: string;
-  rows: string;
-}
-
-function rowCode(plan: AccessPlan): RowCode {
+function rowCode(plan: AccessPlan) {
   return {
-    locals: plan.componentFields
-      .map((_, index) => `const c${index}=fields[${index}].cursor;`)
-      .join(""),
-    batch: plan.componentFields
-      .map(
-        (_, index) =>
-          `const p${index}=u32[(ptrs>>>2)+${index}];` +
-          `const s${index}=((kinds>>>${index * 2})&3)===2?0:fields[${index}].stride;`,
-      )
-      .join(""),
-    rows: plan.componentFields
-      .map((_, index) => `c${index}._base=p${index}+i*s${index};`)
-      .join(""),
+    locals: plan.componentFields.map((_, index) => `const c${index}=fields[${index}].cursor;`).join(""),
+    batch: plan.componentFields.map((_, index) =>
+      `const p${index}=read.ptr(ptrs,${index * abi.pointerSize});` +
+      `const s${index}=((kinds>>>${index * 2})&3)===2?0:fields[${index}].stride;` +
+      `c${index}._view=columnView(fields[${index}].cache,p${index},s${index}?count*s${index}:fields[${index}].stride);`
+    ).join(""),
+    rows: plan.componentFields.map((_, index) => `c${index}._base=i*s${index};`).join(""),
   };
 }
 
-export function compileQueryEach(
-  query: number,
-  iter: number,
-  plan: AccessPlan,
-): (callback: (row: never) => void) => void {
-  if (!plan.componentTerms.length) {
-    return (callback) => {
-      refreshViewHeaps();
-      callback(plan.row as never);
-    };
-  }
-
+function batchCode(plan: AccessPlan, invoke: string): string {
   const code = rowCode(plan);
-  const factory = new Function(
-    "wasm",
-    "refresh",
-    "query",
-    "iter",
-    "row",
-    "entity",
-    "fields",
+  return `
+    const count=read.u32(iter,${abi.count});
+    const entities=read.ptr(iter,${abi.entities});
+    const ptrs=read.ptr(iter,${abi.ptrs});
+    const kinds=read.u32(iter,${abi.fieldKinds});
+    ${code.batch}
+    for(let i=0;i<count;i++){
+      entity.entity=read.u64(entities,i*8);
+      ${code.rows}
+      ${invoke}
+    }`;
+}
+
+export function compileQueryEach(query: number, storage: Uint8Array, plan: AccessPlan): (callback: (row: never) => void) => void {
+  if (!plan.componentTerms.length) return callback => callback(plan.row as never);
+  const code = rowCode(plan);
+  const factory = new Function("native", "read", "ptr", "columnView", "query", "storage", "row", "entity", "fields",
     `${code.locals}return function(callback){
-      refresh();
-      wasm._siecs_ts_query_iter(query,iter);
-      const u32=wasm.HEAPU32;
-      const u64=wasm.HEAPU64;
-      while(wasm._ecs_iter_next(iter)){
-        const count=u32[iter>>>2];
-        const entities=u32[(iter+4)>>>2];
-        const ptrs=u32[(iter+8)>>>2];
-        const kinds=u32[(iter+20)>>>2];
-        ${code.batch}
-        for(let i=0;i<count;i++){
-          entity.entity=u64[(entities>>>3)+i];
-          ${code.rows}
-          callback(row);
-        }
+      const iter=ptr(storage);
+      native.siecs_ts_query_iter(query,iter);
+      while(native.ecs_iter_next(iter)){
+        ${batchCode(plan, "callback(row);")}
       }
-    }`,
-  ) as (
-    wasmModule: typeof wasm,
-    refresh: typeof refreshViewHeaps,
-    queryId: number,
-    iterPointer: number,
-    row: Record<string, unknown>,
-    entity: Entity,
-    fields: ComponentField[],
-  ) => (callback: (row: never) => void) => void;
-
-  return factory(
-    wasm,
-    refreshViewHeaps,
-    query,
-    iter,
-    plan.row,
-    plan.entity!,
-    plan.componentFields,
+    }`
   );
+  return factory(native, read, ptr, columnView, query, storage, plan.row, plan.entity, plan.componentFields);
 }
 
-export interface SystemContext {
-  readonly deltaTime: number;
-}
+export interface SystemContext { readonly deltaTime: number; }
 
-export function compileSystemBatch(
-  plan: AccessPlan,
-  context: { deltaTime: number },
-  callback: (row: never, context: SystemContext) => void,
-): (iter: number) => void {
+export function compileSystemBatch(plan: AccessPlan, context: { deltaTime: number }, callback: (row: never, context: SystemContext) => void): (iter: number) => void {
   if (!plan.componentTerms.length) {
-    return (iter) => {
-      refreshViewHeaps();
-      context.deltaTime = wasm.HEAPF32[(iter + 12) >> 2]!;
+    return iter => {
+      context.deltaTime = read.f32(iter, abi.deltaTime);
       callback(plan.row as never, context);
     };
   }
-
   const code = rowCode(plan);
-  const factory = new Function(
-    "wasm",
-    "refresh",
-    "row",
-    "entity",
-    "fields",
-    "context",
-    "callback",
+  const factory = new Function("read", "columnView", "row", "entity", "fields", "context", "callback",
     `${code.locals}return function(iter){
-      refresh();
-      const u32=wasm.HEAPU32;
-      const u64=wasm.HEAPU64;
-      context.deltaTime=wasm.HEAPF32[(iter+12)>>>2];
-      const count=u32[iter>>>2];
-      const entities=u32[(iter+4)>>>2];
-      const ptrs=u32[(iter+8)>>>2];
-      const kinds=u32[(iter+20)>>>2];
-      ${code.batch}
-      for(let i=0;i<count;i++){
-        entity.entity=u64[(entities>>>3)+i];
-        ${code.rows}
-        callback(row,context);
-      }
-    }`,
-  ) as (
-    wasmModule: typeof wasm,
-    refresh: typeof refreshViewHeaps,
-    row: Record<string, unknown>,
-    entity: Entity,
-    fields: ComponentField[],
-    context: { deltaTime: number },
-    callback: (row: never, context: SystemContext) => void,
-  ) => (iter: number) => void;
-
-  return factory(
-    wasm,
-    refreshViewHeaps,
-    plan.row,
-    plan.entity!,
-    plan.componentFields,
-    context,
-    callback,
+      context.deltaTime=read.f32(iter,${abi.deltaTime});
+      ${batchCode(plan, "callback(row,context);")}
+    }`
   );
+  return factory(read, columnView, plan.row, plan.entity, plan.componentFields, context, callback);
 }
 
 export function refreshObserverRow(plan: AccessPlan, entity: bigint): void {
-  refreshViewHeaps();
-  (plan.entity as unknown as { entity: bigint }).entity = entity;
-  for (const field of plan.componentFields) {
-    field.cursor._base = wasm._ecs_get_cid(entity, field.id);
-  }
+  plan.entity!.entity = entity;
+  for (const field of plan.componentFields) field.cursor._base = native.ecs_get_cid(entity, field.id);
 }

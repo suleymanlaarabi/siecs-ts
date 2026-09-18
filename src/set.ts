@@ -1,198 +1,86 @@
-import type {
-  Component,
-  ComponentMutation,
-  ComponentValue,
-  ReflectedTypeLayout,
-} from "./component.js";
-import { wasm } from "./runtime.js";
+import { ptr } from "bun:ffi";
+import type { Component, ComponentMutation, ComponentValue, ReflectedTypeLayout } from "./component.js";
+import { native } from "./runtime.js";
+import { scalarKind } from "./view.js";
 
 type Setter = (entity: bigint, value: unknown) => void;
-type ValueSetter = (pointer: number, value: unknown) => void;
-
+type ValueSetter = (view: DataView, value: unknown, strings?: Uint8Array[]) => void;
 export const componentSetters: Setter[] = [];
 const directComponentSetters: Setter[] = [];
 
-interface Storage {
-  heap: string;
-  shift: number;
-}
+const methods = {
+  u8: "setUint8", u16: "setUint16", u32: "setUint32", u64: "setBigUint64",
+  i8: "setInt8", i16: "setInt16", i32: "setInt32", i64: "setBigInt64",
+  f32: "setFloat32", f64: "setFloat64", ptr: "setBigUint64",
+} as const;
 
-function storage(kind: number): Storage {
-  switch (kind) {
-    case 0:
-    case 10:
-    case 20:
-      return { heap: "HEAPU8", shift: 0 };
-    case 1:
-    case 21:
-      return { heap: "HEAPU16", shift: 1 };
-    case 2:
-    case 15:
-    case 18:
-    case 22:
-    case 23:
-    case 26:
-      return { heap: "HEAPU32", shift: 2 };
-    case 3:
-    case 25:
-      return { heap: "HEAPU64", shift: 3 };
-    case 4:
-    case 11:
-    case 19:
-      return { heap: "HEAP8", shift: 0 };
-    case 5:
-    case 12:
-      return { heap: "HEAP16", shift: 1 };
-    case 6:
-    case 13:
-    case 14:
-      return { heap: "HEAP32", shift: 2 };
-    case 7:
-    case 24:
-      return { heap: "HEAP64", shift: 3 };
-    case 8:
-      return { heap: "HEAPF32", shift: 2 };
-    case 9:
-      return { heap: "HEAPF64", shift: 3 };
-    default:
-      return { heap: "HEAPU32", shift: 2 };
-  }
-}
-
-function compileWrites(layout: ReflectedTypeLayout) {
-  const heaps = new Map<string, string>();
+function compileWrites(layout: ReflectedTypeLayout, direct: boolean, stringPointers = false): string {
   const writes: string[] = [];
-
-  function emit(type: ReflectedTypeLayout, offset: number, value: string) {
+  let stringIndex = 0;
+  function emit(type: ReflectedTypeLayout, offset: number, value: string): void {
     if (type.kind === 16) {
-      for (const field of type.fields!) {
-        emit(
-          field.type,
-          offset + field.offset,
-          `${value}[${JSON.stringify(field.name)}]`,
-        );
+      for (const field of type.fields!) emit(field.type, offset + field.offset, `${value}[${JSON.stringify(field.name)}]`);
+    } else if (type.kind === 17) {
+      for (let index = 0; index < type.count!; index++) emit(type.element!, offset + index * type.element!.size, `${value}[${index}]`);
+    } else {
+      const kind = scalarKind(type);
+      const scalar = type.kind === 10 ? `+${value}` : value;
+      if (stringPointers && type.kind === 18 && type.element?.kind === 11) {
+        writes.push(`view.setBigUint64(${offset},BigInt(stringPointer(${value},strings,${stringIndex++})),true);`);
+        return;
       }
-      return;
+      writes.push(direct
+        ? `native.siecs_ts_write_${kind}(pointer+${offset},${scalar});`
+        : `view.${methods[kind]}(${offset},${kind === "ptr" ? `BigInt(${scalar})` : scalar},true);`);
     }
-
-    if (type.kind === 17) {
-      for (let index = 0; index < type.count!; index++) {
-        emit(
-          type.element!,
-          offset + index * type.element!.size,
-          `${value}[${index}]`,
-        );
-      }
-      return;
-    }
-
-    const { heap, shift } = storage(type.kind);
-    let local = heaps.get(heap);
-    if (!local) {
-      local = `h${heaps.size}`;
-      heaps.set(heap, local);
-    }
-    writes.push(
-      `${local}[(pointer+${offset})>>>${shift}]=${type.kind === 10 ? "+" : ""}${value};`,
-    );
   }
-
   emit(layout, 0, "value");
-
-  return {
-    heapLocals: Array.from(
-      heaps,
-      ([heap, local]) => `const ${local}=wasm.${heap};`,
-    ).join(""),
-    writes: writes.join(""),
-  };
+  return writes.join("");
 }
 
-function compileDirectComponentSetter(
-  component: Component<unknown, ComponentMutation>,
-  layout: ReflectedTypeLayout,
-): Setter {
-  const compiled = compileWrites(layout);
-
-  const factory = new Function(
-    "wasm",
-    "component",
-    `return function(entity,value){
-      const pointer=wasm._siecs_ts_ensure_cid(entity,component);
-      ${compiled.heapLocals}
-      ${compiled.writes}
-    }`,
-  ) as (wasm: typeof import("./runtime.js").wasm, component: Component<unknown, ComponentMutation>) => Setter;
-
-  return factory(wasm, component);
+function stringPointer(value: string | number, strings: Uint8Array[], index: number): number {
+  if (typeof value !== "string") return value;
+  strings[index] = Buffer.from(value + "\0");
+  return ptr(strings[index]!);
 }
 
-export function compileValueSetter(
-  layout: ReflectedTypeLayout,
-): ValueSetter {
-  const compiled = compileWrites(layout);
-  const factory = new Function(
-    "wasm",
-    `return function(pointer,value){
-      ${compiled.heapLocals}
-      ${compiled.writes}
-    }`,
-  ) as (wasm: typeof import("./runtime.js").wasm) => ValueSetter;
-  return factory(wasm);
+export function compileValueSetter(layout: ReflectedTypeLayout, stringPointers = false): ValueSetter {
+  return new Function("stringPointer", `return function(view,value,strings){${compileWrites(layout, false, stringPointers)}}`)(stringPointer) as ValueSetter;
 }
 
-export function registerComponentSetter(
-  component: Component<unknown, ComponentMutation>,
-  layout: ReflectedTypeLayout,
-) {
-  const direct = compileDirectComponentSetter(component, layout);
-  const serialize = compileValueSetter(layout);
-  const size = Math.max(layout.size, 1);
-  const scratch = wasm._malloc(size);
-  let busy = false;
+export function registerComponentSetter(component: Component<unknown, ComponentMutation>, layout: ReflectedTypeLayout): void {
+  const direct = new Function("native", "component",
+    `return function(entity,value){const pointer=native.siecs_ts_ensure_cid(entity,component);${compileWrites(layout, true)}}`
+  )(native, component) as Setter;
   directComponentSetters[component] = direct;
+  const serialize = compileValueSetter(layout);
+  // Retained buffers keep their addresses stable. Reentrancy uses a separate depth.
+  const buffers = [new Uint8Array(Math.max(layout.size, 1))];
+  const views = [new DataView(buffers[0]!.buffer)];
+  const pointers = [ptr(buffers[0]!)];
+  let depth = 0;
   componentSetters[component] = (entity, value) => {
-    if (!busy) {
-      busy = true;
-      try {
-        serialize(scratch, value);
-        wasm._ecs_set_cid(entity, component, scratch);
-      } finally {
-        busy = false;
-      }
-      return;
+    const index = depth++;
+    if (!buffers[index]) {
+      buffers[index] = new Uint8Array(Math.max(layout.size, 1));
+      views[index] = new DataView(buffers[index]!.buffer);
+      pointers[index] = ptr(buffers[index]!);
     }
-
-    const stack = wasm.stackSave();
     try {
-      const temporary = wasm.stackAlloc(size);
-      serialize(temporary, value);
-      wasm._ecs_set_cid(entity, component, temporary);
+      serialize(views[index]!, value);
+      native.ecs_set_cid(entity, component, pointers[index]!);
     } finally {
-      wasm.stackRestore(stack);
+      depth--;
     }
   };
 }
 
-export function registerSetOnlyComponentSetter(
-  component: Component<unknown, ComponentMutation>,
-  setter: Setter,
-) {
+export function registerSetOnlyComponentSetter(component: Component<unknown, ComponentMutation>, setter: Setter): void {
   componentSetters[component] = setter;
 }
-
-export function setComponent<ComponentType extends Component<unknown, ComponentMutation>>(
-  entity: bigint,
-  component: ComponentType,
-  value: ComponentValue<ComponentType>,
-) {
+export function setComponent<ComponentType extends Component<unknown, ComponentMutation>>(entity: bigint, component: ComponentType, value: ComponentValue<ComponentType>): void {
   componentSetters[component]!(entity, value);
 }
-
-export function directSetComponent<ComponentType extends Component<unknown, ComponentMutation>>(
-  entity: bigint,
-  component: ComponentType,
-  value: ComponentValue<ComponentType>,
-) {
+export function directSetComponent<ComponentType extends Component<unknown, ComponentMutation>>(entity: bigint, component: ComponentType, value: ComponentValue<ComponentType>): void {
   directComponentSetters[component]!(entity, value);
 }

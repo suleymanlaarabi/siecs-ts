@@ -1,4 +1,4 @@
-import { allocateString, wasm } from "./runtime.js";
+import { native } from "./runtime.js";
 import { registerComponentSetter } from "./set.js";
 
 export interface SireflectTypes {
@@ -26,7 +26,7 @@ export interface SireflectTypes {
   double: number;
   short: number;
   int: number;
-  long: number;
+  long: bigint;
   ptr: number;
 }
 
@@ -131,13 +131,14 @@ export function component(
   name: string,
   schema?: ComponentSchema,
 ): Component<unknown, "direct"> {
-  const namePointer = allocateString(name);
-  const fieldsPointer = allocateString(schemaSource(schema));
-  const id = wasm._siecs_ts_component_init(namePointer, fieldsPointer);
-  wasm._free(fieldsPointer);
-  wasm._free(namePointer);
+  const id = native.siecs_ts_component_init(name, schemaSource(schema));
+  return bindComponent(id, name);
+}
+
+/** Adopt a component registered by the native module without replacing its ops. */
+export function bindComponent<Data>(id: number, name: string): Component<Data, "direct"> {
   componentNames[id] = name;
-  const registered = id as Component<unknown, "direct">;
+  const registered = id as Component<Data, "direct">;
   registerComponentSetter(registered, componentLayout(registered));
   return registered;
 }
@@ -148,29 +149,29 @@ export function reflectType(type: bigint): ReflectedTypeLayout {
     return cached;
   }
 
-  const kind = wasm._siecs_ts_type_kind(type);
+  const kind = native.siecs_ts_type_kind(type);
   const layout: ReflectedTypeLayout = {
     kind,
-    size: wasm._siecs_ts_type_size(type),
+    size: native.siecs_ts_type_size(type),
   };
   typeLayouts.set(type, layout);
 
   if (kind === 16) {
-    const count = wasm._siecs_ts_type_field_count(type);
+    const count = native.siecs_ts_type_field_count(type);
     const fields = new Array<ReflectedFieldLayout>(count);
 
     for (let index = 0; index < count; index++) {
       fields[index] = {
-        name: wasm.UTF8ToString(wasm._siecs_ts_type_field_name(type, index)),
-        offset: wasm._siecs_ts_type_field_offset(type, index),
-        type: reflectType(wasm._siecs_ts_type_field_type(type, index)),
+        name: native.siecs_ts_type_field_name(type, index),
+        offset: native.siecs_ts_type_field_offset(type, index),
+        type: reflectType(native.siecs_ts_type_field_type(type, index)),
       };
     }
 
     layout.fields = fields;
   } else if (kind === 17 || kind === 18) {
-    layout.element = reflectType(wasm._siecs_ts_type_element(type));
-    if (kind === 17) layout.count = wasm._siecs_ts_type_element_count(type);
+    layout.element = reflectType(native.siecs_ts_type_element(type));
+    if (kind === 17) layout.count = native.siecs_ts_type_element_count(type);
   }
 
   return layout;
@@ -179,5 +180,5 @@ export function reflectType(type: bigint): ReflectedTypeLayout {
 export function componentLayout(
   component: Component<unknown, ComponentMutation>,
 ): ReflectedTypeLayout {
-  return reflectType(wasm._siecs_ts_component_type(component));
+  return reflectType(native.siecs_ts_component_type(component));
 }

@@ -1,18 +1,13 @@
+import { ptr } from "bun:ffi";
 import { type Component, componentLayout } from "../src/component.ts";
 import { Entity } from "../src/entity.ts";
-import { wasm } from "../src/runtime.ts";
-import { type Cursor, createView, refreshViewHeaps } from "../src/view.ts";
+import { abi, native, read } from "../src/runtime.ts";
+import { type Cursor, columnView, createView } from "../src/view.ts";
 
 export function genericQuery(descriptor: Record<string, number>) {
   const entries = Object.entries(descriptor);
-  const termsPointer = wasm._malloc(entries.length * 4);
-
-  for (let index = 0; index < entries.length; index++) {
-    wasm.HEAPU32[(termsPointer >> 2) + index] = entries[index]![1];
-  }
-
-  const query = wasm._siecs_ts_query_init(termsPointer, entries.length, 0, 0);
-  wasm._free(termsPointer);
+  const terms = new Uint32Array(entries.map(([, encoded]) => encoded));
+  const query = native.siecs_ts_query_init(terms, entries.length, null, 0);
 
   const entity = new Entity(0n);
   const row: Record<string, unknown> = { entity };
@@ -30,32 +25,33 @@ export function genericQuery(descriptor: Record<string, number>) {
     }
   }
 
-  const iter = wasm._malloc(32);
-  const pointers = new Uint32Array(cursors.length);
+  const storage = new Uint8Array(abi.iterSize);
+  const iter = ptr(storage);
+  const pointers = new Float64Array(cursors.length);
   const steps = new Uint32Array(cursors.length);
+  const caches = cursors.map(() => new Map<number, DataView>());
 
   return {
     each(callback: (row: any) => void) {
-      refreshViewHeaps();
-      wasm._siecs_ts_query_iter(query, iter);
-      const u32 = wasm.HEAPU32;
-      const u64 = wasm.HEAPU64;
-
-      while (wasm._ecs_iter_next(iter)) {
-        const count = u32[iter >> 2]!;
-        const entities = u32[(iter + 4) >> 2]!;
-        const fields = u32[(iter + 8) >> 2]! >> 2;
-        const kinds = u32[(iter + 20) >> 2]!;
+      native.siecs_ts_query_iter(query, storage);
+      while (native.ecs_iter_next(storage)) {
+        const count = read.u32(iter, abi.count);
+        const entities = read.ptr(iter, abi.entities);
+        const fields = read.ptr(iter, abi.ptrs);
+        const kinds = read.u32(iter, abi.fieldKinds);
 
         for (let field = 0; field < cursors.length; field++) {
-          pointers[field] = u32[fields + field]!;
+          pointers[field] = read.ptr(fields, field * abi.pointerSize);
           steps[field] = ((kinds >>> (field * 2)) & 3) === 2 ? 0 : strides[field]!;
+          cursors[field]!._view = columnView(
+            caches[field]!, pointers[field]!, steps[field] ? count * steps[field]! : strides[field]!,
+          );
         }
 
         for (let index = 0; index < count; index++) {
-          (entity as { entity: bigint }).entity = u64[(entities >> 3) + index]!;
+          (entity as { entity: bigint }).entity = read.u64(entities, index * 8);
           for (let field = 0; field < cursors.length; field++) {
-            cursors[field]!._base = pointers[field]! + index * steps[field]!;
+            cursors[field]!._base = index * steps[field]!;
           }
           callback(row);
         }

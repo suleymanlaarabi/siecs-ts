@@ -1,4 +1,4 @@
-import { rmSync } from "node:fs";
+import { copyFileSync, cpSync, mkdirSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 const root = dirname(import.meta.dir);
@@ -15,7 +15,7 @@ rmSync(output, { recursive: true, force: true });
 const build = await Bun.build({
   entrypoints: [join(root, "index.ts")],
   outdir: output,
-  target: "browser",
+  target: "bun",
   format: "esm",
   minify: true,
 });
@@ -34,8 +34,10 @@ if (declarations.exitCode !== 0) {
   throw new Error(`tsc failed with exit code ${declarations.exitCode}`);
 }
 
-for (const internal of ["runtime", "set"]) {
-  rmSync(join(output, "src", `${internal}.d.ts`));
-}
+rmSync(join(output, "src/runtime.d.ts"));
+
+mkdirSync(join(output, "native/rendering"), { recursive: true });
+copyFileSync(join(root, "native/libsiecs_ts.so"), join(output, "native/libsiecs_ts.so"));
+cpSync(join(root, "native/rendering/shaders"), join(output, "native/rendering/shaders"), { recursive: true });
 
 console.log(`Built ${join(output, "index.js")}`);

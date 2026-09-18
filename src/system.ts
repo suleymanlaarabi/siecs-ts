@@ -6,7 +6,7 @@ import {
   compileAccess,
   compileSystemBatch,
 } from "./access.js";
-import { allocateString, wasm } from "./runtime.js";
+import { abi, fini as closeRuntime, native, registerCallback } from "./runtime.js";
 
 declare const phaseBrand: unique symbol;
 declare const systemBrand: unique symbol;
@@ -50,13 +50,11 @@ function systemId(system: System): number {
 }
 
 export function phase(name: string, options: PhaseOptions = {}): Phase {
-  const namePointer = allocateString(name);
-  const id = wasm._siecs_ts_phase_init(
-    namePointer,
+  const id = native.siecs_ts_phase_init(
+    name,
     options.after ?? NoPhase,
     options.before ?? NoPhase,
   );
-  wasm._free(namePointer);
   return id as Phase;
 }
 
@@ -74,63 +72,68 @@ export function system<const Descriptor extends AccessDescriptor>({
   options?: SystemOptions;
 }): System {
   const plan = compileAccess(query);
+  const dependencies = options.after ?? [];
+  if (dependencies.length > abi.afterCapacity) {
+    throw new RangeError(`Native systems support at most ${abi.afterCapacity} dependencies`);
+  }
   const context = { deltaTime: 0 };
   const batch = compileSystemBatch(
     plan,
     context,
     each as (row: never, context: SystemContext) => void,
   );
-  const callbackPointer = wasm.addFunction(batch, "vi");
-  const namePointer = allocateString(name);
+  const callbackPointer = registerCallback(batch);
   const components = allocateTerms(plan.componentTerms);
   const resources = allocateTerms(plan.resourceTerms);
-  const dependencies = options.after ?? [];
-  const afterPointer = dependencies.length
-    ? wasm._malloc(dependencies.length * 2)
-    : 0;
-  for (let index = 0; index < dependencies.length; index++) {
-    wasm.HEAPU16[(afterPointer >> 1) + index] = systemId(dependencies[index]!);
-  }
+  const after = dependencies.length ? new Uint16Array(dependencies.map(systemId)) : null;
 
-  const id = wasm._siecs_ts_system_init(
-    namePointer,
+  const id = native.siecs_ts_system_init(
+    name,
     components,
     plan.componentTerms.length,
     resources,
     plan.resourceTerms.length,
     options.phase ?? OnUpdate,
-    afterPointer,
+    after,
     dependencies.length,
     callbackPointer,
     options.disabled ?? false,
   );
-  if (afterPointer) wasm._free(afterPointer);
-  if (resources) wasm._free(resources);
-  if (components) wasm._free(components);
-  wasm._free(namePointer);
   return { id } as SystemHandle;
 }
 
 export function runSystem(system: System): void {
-  wasm._ecs_run_system(systemId(system));
+  native.ecs_run_system(systemId(system));
 }
 
 export function runPhase(phase: Phase): void {
-  wasm._ecs_run_phase(phase);
+  native.ecs_run_phase(phase);
 }
 
 export function run(): void {
-  wasm._ecs_run();
+  try {
+    native.siecs_ts_run();
+  } finally {
+    closeRuntime();
+  }
 }
 
 export function progress(): boolean {
-  return wasm._ecs_progress() !== 0;
+  return native.ecs_progress();
+}
+
+export function quit(): void {
+  native.ecs_quit();
+}
+
+export function fini(): void {
+  closeRuntime();
 }
 
 export function enableSystem(system: System): void {
-  wasm._ecs_system_enable(systemId(system));
+  native.ecs_system_enable(systemId(system));
 }
 
 export function disableSystem(system: System): void {
-  wasm._ecs_system_disable(systemId(system));
+  native.ecs_system_disable(systemId(system));
 }

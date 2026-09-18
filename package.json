@@ -1,11 +1,11 @@
 {
   "name": "siecs-ts",
   "version": "0.1.0",
-  "description": "Portable WebAssembly bindings for SIECS",
+  "description": "Native Bun bindings and SDL3 GPU rendering for SIECS",
   "keywords": [
     "ecs",
-    "webassembly",
-    "wasm",
+    "bun",
+    "sdl3",
     "typescript",
     "game-development"
   ],
@@ -29,21 +29,19 @@
     "LICENSE"
   ],
   "scripts": {
-    "build:wasm": "bun scripts/build-wasm.ts",
     "build:package": "bun scripts/build-package.ts",
-    "build": "bun run build:wasm && bun run build:package",
+    "build": "bun run build:native && bun run build:package",
     "example:basic": "bun examples/basic.ts",
-    "test:browser": "bun run build && bun scripts/test-browser.ts",
     "test:package": "bun run build && bun scripts/test-package.ts",
     "bench:query": "bun bench/query.ts",
     "bench:set": "bun bench/set.ts",
     "bench:system": "bun bench/system.ts",
-    "bench:browser": "bun scripts/bench-browser.ts",
-    "bench:query:browser": "bun scripts/bench-browser.ts",
     "typecheck": "tsc --noEmit",
-    "test": "bun run build:wasm && bun test",
-    "check": "bun run build && bun run typecheck && bun test && bun scripts/test-browser.ts && bun scripts/test-package.ts",
-    "prepack": "bun run build && bun run typecheck && bun test && bun scripts/test-package.ts"
+    "test": "bun run build:native && bun test",
+    "check": "bun run build && bun run typecheck && bun test && bun scripts/test-package.ts",
+    "prepack": "bun run build && bun run typecheck && bun test && bun scripts/test-package.ts",
+    "build:native": "bun scripts/build-native.ts",
+    "example:3d": "bun examples/rendering.ts"
   },
   "publishConfig": {
     "access": "public"
@@ -51,5 +49,14 @@
   "devDependencies": {
     "@types/bun": "latest",
     "typescript": "latest"
-  }
+  },
+  "engines": {
+    "bun": ">=1.4.2"
+  },
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ]
 }

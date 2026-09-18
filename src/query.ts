@@ -5,7 +5,7 @@ import {
   compileAccess,
   compileQueryEach,
 } from "./access.js";
-import { wasm } from "./runtime.js";
+import { abi, native } from "./runtime.js";
 
 export type QueryRow<Descriptor extends AccessDescriptor> =
   AccessRow<Descriptor>;
@@ -21,16 +21,13 @@ export function query<const Descriptor extends AccessDescriptor>(
   const plan = compileAccess(descriptor);
   const components = allocateTerms(plan.componentTerms);
   const resources = allocateTerms(plan.resourceTerms);
-  const id = wasm._siecs_ts_query_init(
+  const id = native.siecs_ts_query_init(
     components,
     plan.componentTerms.length,
     resources,
     plan.resourceTerms.length,
   );
-  if (components) wasm._free(components);
-  if (resources) wasm._free(resources);
-
-  const iter = wasm._malloc(32);
+  const iter = new Uint8Array(abi.iterSize);
   const each = compileQueryEach(id, iter, plan);
 
   function map<T>(fn: (_: QueryRow<Descriptor>) => T) {

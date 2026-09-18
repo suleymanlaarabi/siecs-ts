@@ -1,26 +1,61 @@
 #include "../siecs/siecs.h"
 #include <stddef.h>
 #include <stdlib.h>
+#include <string.h>
 
-_Static_assert(sizeof(void *) == 4, "siecs-ts requires wasm32 pointers");
-_Static_assert(offsetof(ecs_iter_t, count) == 0, "unexpected ecs_iter_t.count offset");
-_Static_assert(offsetof(ecs_iter_t, entities) == 4, "unexpected ecs_iter_t.entities offset");
-_Static_assert(offsetof(ecs_iter_t, ptrs) == 8, "unexpected ecs_iter_t.ptrs offset");
-_Static_assert(offsetof(ecs_iter_t, field_kind_bits) == 20,
-               "unexpected ecs_iter_t.field_kind_bits offset");
-_Static_assert(sizeof(ecs_iter_t) == 32, "unexpected ecs_iter_t size");
-_Static_assert(offsetof(ecs_observer_event_t, entity) == 0,
-               "unexpected ecs_observer_event_t.entity offset");
-_Static_assert(offsetof(ecs_observer_event_t, event) == 8,
-               "unexpected ecs_observer_event_t.event offset");
-_Static_assert(offsetof(ecs_observer_event_t, trigger_data) == 16,
-               "unexpected ecs_observer_event_t.trigger_data offset");
-_Static_assert(offsetof(ecs_relation_event_t, relation) == 0,
-               "unexpected ecs_relation_event_t.relation offset");
-_Static_assert(offsetof(ecs_relation_event_t, old_target) == 8,
-               "unexpected ecs_relation_event_t.old_target offset");
-_Static_assert(offsetof(ecs_relation_event_t, new_target) == 16,
-               "unexpected ecs_relation_event_t.new_target offset");
+/* The binding owns teardown; unlike ecs_run, this loop does not finalize. */
+void siecs_ts_run(void) {
+    while (ecs_progress()) {}
+}
+
+static void siecs_ts_free_name(void *name) { free(name); }
+
+static const char *siecs_ts_owned_name(const char *name) {
+    char *copy = strdup(name);
+    ecs_at_fini({ .callback = siecs_ts_free_name, .data = copy });
+    return copy;
+}
+
+/* Read once by Bun: native pointers and alignment never use wasm32 offsets. */
+SIECS_PUBLIC_API const uint32_t *siecs_ts_abi(void) {
+    static const uint32_t layout[] = {
+        sizeof(void *), sizeof(ecs_iter_t),
+        offsetof(ecs_iter_t, count), offsetof(ecs_iter_t, entities),
+        offsetof(ecs_iter_t, ptrs), offsetof(ecs_iter_t, delta_time),
+        offsetof(ecs_iter_t, field_kind_bits),
+        offsetof(ecs_observer_event_t, entity),
+        offsetof(ecs_observer_event_t, trigger_data),
+        offsetof(ecs_relation_event_t, relation),
+        offsetof(ecs_relation_event_t, old_target),
+        offsetof(ecs_relation_event_t, new_target),
+        ECS_QUERY_TERM_CAPACITY, ECS_QUERY_RESOURCE_CAPACITY, ECS_SYSTEM_AFTER_CAPACITY,
+    };
+    return layout;
+}
+
+SIECS_PUBLIC_API void *siecs_ts_alloc(size_t size) { return malloc(size); }
+SIECS_PUBLIC_API void siecs_ts_free(void *ptr) { free(ptr); }
+
+/* Bun has allocation-free scalar reads; these stores are direct C ABI calls. */
+#define SIECS_TS_STORE(name, type) \
+    SIECS_PUBLIC_API void siecs_ts_write_##name(void *ptr, type value) { \
+        *(type *)ptr = value; \
+    }
+SIECS_TS_STORE(u8, uint8_t)
+SIECS_TS_STORE(u16, uint16_t)
+SIECS_TS_STORE(u32, uint32_t)
+SIECS_TS_STORE(u64, uint64_t)
+SIECS_TS_STORE(i8, int8_t)
+SIECS_TS_STORE(i16, int16_t)
+SIECS_TS_STORE(i32, int32_t)
+SIECS_TS_STORE(i64, int64_t)
+SIECS_TS_STORE(f32, float)
+SIECS_TS_STORE(f64, double)
+SIECS_TS_STORE(ptr, void *)
+#undef SIECS_TS_STORE
+
+SIECS_PUBLIC_API ecs_component_t siecs_ts_builtin_abstract(void) { return ecs_id(Abstract); }
+SIECS_PUBLIC_API ecs_relation_id_t siecs_ts_builtin_isa(void) { return ecs_rid(IsA); }
 
 SIECS_PUBLIC_API ecs_component_t
 siecs_ts_component_init(const char *name, const char *fields) {
@@ -67,7 +102,8 @@ SIECS_PUBLIC_API ecs_resource_t siecs_ts_resource_init(
 
     if (!resource) {
         resource = ecs_resource_init(&(ecs_resource_desc_t){
-            .name = name,
+            /* SIECS borrows resource names; FFI cstring arguments are temporary. */
+            .name = info->name,
             .size = info->size,
         });
         void *zero = calloc(1, info->size ? info->size : 1);
@@ -180,7 +216,7 @@ SIECS_PUBLIC_API ecs_system_id_t siecs_ts_system_init(
     bool disabled
 ) {
     ecs_system_desc_t desc = {
-        .name = name,
+        .name = siecs_ts_owned_name(name),
         .callback = callback,
         .phase = phase,
         .disabled = disabled,
@@ -215,7 +251,7 @@ SIECS_PUBLIC_API ecs_phase_t siecs_ts_phase_init(
     ecs_phase_t before
 ) {
     return ecs_phase_init(&(ecs_phase_desc_t){
-        .name = name,
+        .name = siecs_ts_owned_name(name),
         .after = after,
         .before = before,
     });

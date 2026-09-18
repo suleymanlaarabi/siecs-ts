@@ -15,19 +15,19 @@ import {
   target,
   unrelate,
 } from "../index.ts";
-import { wasm } from "../src/runtime.ts";
+import { native as binding } from "../src/runtime.ts";
 import { directSetComponent } from "../src/set.ts";
 import { measure, measurePair } from "./measure.ts";
 
 export function runSetBenchmark(entityCount = 100_000) {
   const Value = component("BenchSetValue", { value: "i32" });
   const entities = new Array<bigint>(entityCount);
-  const entitiesPointer = wasm._malloc(entityCount * 8);
+  const nativeEntities = new BigUint64Array(entityCount);
 
   for (let index = 0; index < entityCount; index++) {
     const object = entity().set(Value, { value: 0 });
     entities[index] = object.entity;
-    wasm.HEAPU64[(entitiesPointer >> 3) + index] = object.entity;
+    nativeEntities[index] = object.entity;
   }
 
   const value = { value: 0 };
@@ -40,8 +40,8 @@ export function runSetBenchmark(entityCount = 100_000) {
     for (const object of entities) set(object, Value, value);
   };
   const native = () => {
-    wasm._siecs_ts_bench_set_i32(
-      entitiesPointer,
+    binding.siecs_ts_bench_set_i32(
+      nativeEntities,
       entityCount,
       Value,
       ++value.value,

@@ -1,5 +1,5 @@
 import type { Component, ComponentMutation, ComponentValue } from "./component.js";
-import { wasm } from "./runtime.js";
+import { native } from "./runtime.js";
 import type { Relation } from "./relation.js";
 import {
   hasRelation,
@@ -10,25 +10,25 @@ import {
 import { getName, setName } from "./name.js";
 import { componentSetters, setComponent } from "./set.js";
 
-export const add = wasm._ecs_add_cid as (
+export const add = native.ecs_add_cid as (
   entity: bigint,
   component: Component<unknown, ComponentMutation>,
 ) => void;
 
 export const has = (entity: bigint, component: Component<unknown, ComponentMutation>) =>
-  wasm._ecs_has_cid(entity, component) !== 0;
+  native.ecs_has_cid(entity, component);
 
-export const remove = wasm._ecs_remove_cid as (
+export const remove = native.ecs_remove_cid as (
   entity: bigint,
   component: Component<unknown, ComponentMutation>,
 ) => void;
 
-export const kill = wasm._ecs_kill as (entity: bigint) => void;
+export const kill = native.ecs_kill as (entity: bigint) => void;
 
-export const createEntity = wasm._ecs_new as () => bigint;
+export const createEntity = native.ecs_new as () => bigint;
 
 export function isAlive(entity: bigint): boolean {
-  return entity !== 0n && wasm._ecs_is_alive(entity) !== 0;
+  return entity !== 0n && native.ecs_is_alive(entity);
 }
 
 export function set<ComponentType extends Component>(

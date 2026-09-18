@@ -1,7 +1,7 @@
-import { wasm } from "./runtime.js";
+import { native } from "./runtime.js";
 
-export const deferBegin = wasm._ecs_defer_begin as () => void;
-export const deferEnd = wasm._ecs_defer_end as () => void;
+export const deferBegin = native.ecs_defer_begin as () => void;
+export const deferEnd = native.ecs_defer_end as () => void;
 
 /** Runs synchronous mutations as one SIECS deferred transaction. */
 export function defer<T>(fn: () => T): T {

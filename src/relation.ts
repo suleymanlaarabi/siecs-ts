@@ -1,4 +1,4 @@
-import { wasm } from "./runtime.js";
+import { native } from "./runtime.js";
 
 declare const relationBrand: unique symbol;
 
@@ -11,17 +11,17 @@ export function relate(
   relation: Relation,
   target: bigint,
 ): void {
-  wasm._ecs_relate_id(entity, relation, target);
+  native.ecs_relate_id(entity, relation, target);
 }
 
 export function unrelate(entity: bigint, relation: Relation): void {
-  wasm._ecs_unrelate_id(entity, relation);
+  native.ecs_unrelate_id(entity, relation);
 }
 
 export function target(entity: bigint, relation: Relation): bigint {
-  return wasm._ecs_target_id(entity, relation);
+  return native.ecs_target_id(entity, relation);
 }
 
 export function hasRelation(entity: bigint, relation: Relation): boolean {
-  return wasm._ecs_has_relation_id(entity, relation) !== 0;
+  return native.ecs_has_relation_id(entity, relation);
 }

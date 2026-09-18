@@ -1,5 +1,5 @@
 import { component, query, write } from "../index.ts";
-import { wasm } from "../src/runtime.ts";
+import { native as binding } from "../src/runtime.ts";
 import { genericQuery } from "./generic-query.ts";
 
 interface Result {
@@ -55,12 +55,8 @@ function measure(run: () => void) {
 }
 
 function nativeQuery(descriptor: Record<string, number>) {
-  const terms = Object.values(descriptor);
-  const pointer = wasm._malloc(terms.length * 4);
-  wasm.HEAPU32.set(terms, pointer >> 2);
-  const query = wasm._siecs_ts_query_init(pointer, terms.length, 0, 0);
-  wasm._free(pointer);
-  return query;
+  const terms = new Uint32Array(Object.values(descriptor));
+  return binding.siecs_ts_query_init(terms, terms.length, null, 0);
 }
 
 function callback(fieldCount: number) {
@@ -95,11 +91,11 @@ function fixture(prefix: string, archetypes: number, entityCount: number) {
   );
 
   for (let index = 0; index < entityCount; index++) {
-    const entity = wasm._ecs_new();
-    for (const field of fields) wasm._ecs_add_cid(entity, field);
+    const entity = binding.ecs_new();
+    for (const field of fields) binding.ecs_add_cid(entity, field);
     const table = index % archetypes;
     for (let bit = 0; bit < tags.length; bit++) {
-      if (table & (1 << bit)) wasm._ecs_add_cid(entity, tags[bit]!);
+      if (table & (1 << bit)) binding.ecs_add_cid(entity, tags[bit]!);
     }
   }
 
@@ -135,7 +131,7 @@ export function runQueryBenchmark(entityCount = 100_000): Result[] {
       const nativeTime =
         measure(() => {
           for (let index = 0; index < nativeRepeats; index++) {
-            wasm._siecs_ts_bench_i32(native, fieldCount);
+            binding.siecs_ts_bench_i32(native, fieldCount);
           }
         }) / nativeRepeats;
 
