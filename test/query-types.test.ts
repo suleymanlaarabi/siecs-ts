@@ -43,10 +43,14 @@ if (false) {
     row.entity;
   });
 
-  system("TypeSystem", { time: write(Time) }, (row) => {
-    row.time.delta = 1;
-    // @ts-expect-error resource-only systems have no entity
-    row.entity;
+  system({
+    name: "TypeSystem",
+    query: { time: write(Time) },
+    each: (row) => {
+      row.time.delta = 1;
+      // @ts-expect-error resource-only systems have no entity
+      row.entity;
+    },
   });
 
   const Damage = event<{ amount: number }>();

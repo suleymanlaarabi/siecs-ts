@@ -60,21 +60,25 @@ export function phase(name: string, options: PhaseOptions = {}): Phase {
   return id as Phase;
 }
 
-export function system<const Descriptor extends AccessDescriptor>(
-  name: string,
-  descriptor: Descriptor & { readonly entity?: never },
-  callback: (
-    row: AccessRow<Descriptor>,
-    context: SystemContext,
-  ) => void,
-  options: SystemOptions = {},
-): System {
-  const plan = compileAccess(descriptor);
+type SystemDesc = {};
+
+export function system<const Descriptor extends AccessDescriptor>({
+  name = "Unknown",
+  query = {} as Descriptor,
+  each,
+  options = {},
+}: {
+  name?: string;
+  query?: Descriptor & { readonly entity?: never };
+  each: (row: AccessRow<Descriptor>, context: SystemContext) => void;
+  options?: SystemOptions;
+}): System {
+  const plan = compileAccess(query);
   const context = { deltaTime: 0 };
   const batch = compileSystemBatch(
     plan,
     context,
-    callback as (row: never, context: SystemContext) => void,
+    each as (row: never, context: SystemContext) => void,
   );
   const callbackPointer = wasm.addFunction(batch, "vi");
   const namePointer = allocateString(name);

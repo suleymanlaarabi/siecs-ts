@@ -30,8 +30,8 @@ export class Entity {
     this.entity = entity;
   }
 
-  add(component: Component): Entity {
-    add(this.entity, component);
+  add(...components: Component[]): Entity {
+    components.forEach((cid) => add(this.entity, cid));
     return this;
   }
 
@@ -39,8 +39,8 @@ export class Entity {
     return has(this.entity, component);
   }
 
-  remove(component: Component): Entity {
-    remove(this.entity, component);
+  remove(...components: Component[]): Entity {
+    components.forEach((cid) => remove(this.entity, cid));
     return this;
   }
 
@@ -53,4 +53,8 @@ export class Entity {
   }
 }
 
-export const entity = () => new Entity(wasm._ecs_new());
+export const entity = (...components: Component[]) => {
+  const e = new Entity(wasm._ecs_new());
+  e.add(...components);
+  return e;
+};

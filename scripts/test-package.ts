@@ -62,7 +62,7 @@ try {
     let observed = 0;
     observer(OnSet, { position: Position }, ({ position }) => observed = position.x);
     object.set(Position, { x: 11, y: 20 });
-    const Move = system("PackageMove", { position: write(Position), time: Time }, (row) => row.position.x += row.time.delta);
+    const Move = system({ name: "PackageMove", query: { position: write(Position), time: Time }, each: (row) => row.position.x += row.time.delta });
     runSystem(Move);
     let valid = false;
     query({ position: Position }).each(({ position }) => {

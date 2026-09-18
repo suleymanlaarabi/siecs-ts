@@ -10,7 +10,11 @@ export function runSystemBenchmark(entityCount = 100_000) {
 
   const values = query({ value: write(Value) });
   const update = (row: { value: { value: number } }) => row.value.value++;
-  const Update = system("BenchSystem", { value: write(Value) }, update);
+  const Update = system({
+    name: "BenchSystem",
+    query: { value: write(Value) },
+    each: update,
+  });
   const encoded = (Value as number) | (2 << 16);
   const pointer = wasm._malloc(4);
   wasm.HEAPU32[pointer >> 2] = encoded;

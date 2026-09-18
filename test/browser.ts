@@ -36,11 +36,11 @@ observer(OnSet, { position: Position }, (row) => {
 });
 first.set(Position, { x: 5, y: 1 });
 
-const Move = system(
-  "BrowserMove",
-  { position: write(Position), time: Time },
-  (row) => (row.position.x += row.time.delta),
-);
+const Move = system({
+  name: "BrowserMove",
+  query: { position: write(Position), time: Time },
+  each: (row) => (row.position.x += row.time.delta),
+});
 runSystem(Move);
 
 let systemValue = 0;

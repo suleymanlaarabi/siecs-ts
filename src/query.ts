@@ -12,6 +12,7 @@ export type QueryRow<Descriptor extends AccessDescriptor> =
 
 export interface Query<Row> {
   each(callback: (row: Row) => void): void;
+  map<T>(callback: (row: Row) => T): T[];
 }
 
 export function query<const Descriptor extends AccessDescriptor>(
@@ -31,5 +32,12 @@ export function query<const Descriptor extends AccessDescriptor>(
 
   const iter = wasm._malloc(32);
   const each = compileQueryEach(id, iter, plan);
-  return { each } as Query<QueryRow<Descriptor>>;
+
+  function map<T>(fn: (_: QueryRow<Descriptor>) => T) {
+    const result: T[] = [];
+    each((row) => result.push(fn(row)));
+    return result;
+  }
+
+  return { each, map } as Query<QueryRow<Descriptor>>;
 }

@@ -20,15 +20,15 @@ test("runs typed systems once per matching entity", () => {
   entity().set(Position, { x: 2 });
   let calls = 0;
 
-  const Move = system(
-    "TsMove",
-    { position: write(Position), time: Time },
-    (row, context) => {
+  const Move = system({
+    name: "TsMove",
+    query: { position: write(Position), time: Time },
+    each: (row, context) => {
       row.position.x += row.time.delta;
       expect(typeof context.deltaTime).toBe("number");
       calls++;
     },
-  );
+  });
 
   runSystem(Move);
   expect(calls).toBe(2);
@@ -46,25 +46,25 @@ test("runs resource-only systems once and honors same-phase dependencies", () =>
   const Update = phase("TsOrderedUpdate", { after: PostRender });
   const order: string[] = [];
 
-  const First = system(
-    "TsFirst",
-    { state: write(State) },
-    (row) => {
+  const First = system({
+    name: "TsFirst",
+    query: { state: write(State) },
+    each: (row) => {
       row.state.value++;
       order.push("first");
     },
-    { phase: Update },
-  );
-  system(
-    "TsSecond",
-    { state: State },
-    (row) => {
+    options: { phase: Update },
+  });
+  system({
+    name: "TsSecond",
+    query: { state: State },
+    each: (row) => {
       expect(row.state.value).toBe(1);
       expect("entity" in row).toBe(false);
       order.push("second");
     },
-    { phase: Update, after: [First] },
-  );
+    options: { phase: Update, after: [First] },
+  });
 
   runPhase(Update);
   expect(order).toEqual(["first", "second"]);
