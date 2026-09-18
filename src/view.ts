@@ -123,6 +123,17 @@ function defineValue(
   layout: ReflectedTypeLayout,
   writable: boolean,
 ) {
+  if (layout.kind === 18 && layout.element?.kind === 11) {
+    Object.defineProperty(cursor, key, {
+      enumerable: true,
+      get: () => {
+        const pointer = u32.array[(cursor._base + offset) >> 2]!;
+        return pointer ? wasm.UTF8ToString(pointer) : "";
+      },
+    });
+    return;
+  }
+
   if (layout.kind !== 16 && layout.kind !== 17) {
     defineScalar(cursor, key, offset, layout.kind, writable);
     return;

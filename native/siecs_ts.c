@@ -30,6 +30,26 @@ siecs_ts_component_init(const char *name, const char *fields) {
     });
 }
 
+SIECS_PUBLIC_API ecs_component_t
+siecs_ts_builtin_name(void) {
+    return ecs_id(Name);
+}
+
+SIECS_PUBLIC_API ecs_component_t
+siecs_ts_builtin_disabled(void) {
+    return ecs_id(Disabled);
+}
+
+SIECS_PUBLIC_API ecs_relation_id_t
+siecs_ts_builtin_childof(void) {
+    return ecs_rid(ChildOf);
+}
+
+SIECS_PUBLIC_API void
+siecs_ts_set_name(ecs_entity_t entity, const char *value) {
+    ecs_set(entity, Name, { .value = (char *)value });
+}
+
 SIECS_PUBLIC_API void *
 siecs_ts_ensure_cid(ecs_entity_t entity, ecs_component_t component) {
     ecs_add_cid(entity, component);
@@ -99,7 +119,7 @@ siecs_ts_type_field_offset(sireflect_handle_t type, uint32_t index) {
 
 SIECS_PUBLIC_API sireflect_handle_t
 siecs_ts_type_element(sireflect_handle_t type) {
-    return sireflect_type_element(type);
+    return sireflect_type_info(type)->element_type;
 }
 
 SIECS_PUBLIC_API uint32_t

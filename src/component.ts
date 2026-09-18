@@ -33,8 +33,14 @@ export interface SireflectTypes {
 declare const componentBrand: unique symbol;
 declare const arrayBrand: unique symbol;
 
-export type Component<Data = unknown> = number & {
+export type ComponentMutation = "direct" | "set-only";
+
+export type Component<
+  Data = unknown,
+  Mutation extends ComponentMutation = ComponentMutation,
+> = number & {
   readonly [componentBrand]: Data;
+  readonly __mutation?: Mutation;
 };
 
 export interface ReflectedArray<
@@ -48,7 +54,7 @@ export interface ReflectedArray<
 
 export type ComponentField =
   | string
-  | Component<unknown>
+  | Component<unknown, ComponentMutation>
   | ReflectedArray<unknown, number>;
 
 export type ComponentSchema = Readonly<Record<string, ComponentField>>;
@@ -57,7 +63,7 @@ export type FixedArray<Type, Count extends number> = Type[] & {
   readonly length: Count;
 };
 
-type FieldValue<Field> = Field extends Component<infer Data>
+type FieldValue<Field> = Field extends Component<infer Data, ComponentMutation>
   ? Data
   : Field extends ReflectedArray<infer Type, infer Count>
     ? FixedArray<FieldValue<Type>, Count>
@@ -72,7 +78,7 @@ export type ComponentData<Schema extends ComponentSchema> = {
 };
 
 export type ComponentValue<ComponentType extends Component> =
-  ComponentType extends Component<infer Data> ? Data : never;
+  ComponentType extends Component<infer Data, ComponentMutation> ? Data : never;
 
 export interface ReflectedFieldLayout {
   name: string;
@@ -116,22 +122,22 @@ export function schemaSource(schema: ComponentSchema | undefined): string {
     .join(" ")} }`;
 }
 
-export function component(name: string): Component<Record<never, never>>;
+export function component(name: string): Component<Record<never, never>, "direct">;
 export function component<const Schema extends ComponentSchema>(
   name: string,
   schema: Schema,
-): Component<ComponentData<Schema>>;
+): Component<ComponentData<Schema>, "direct">;
 export function component(
   name: string,
   schema?: ComponentSchema,
-): Component<unknown> {
+): Component<unknown, "direct"> {
   const namePointer = allocateString(name);
   const fieldsPointer = allocateString(schemaSource(schema));
   const id = wasm._siecs_ts_component_init(namePointer, fieldsPointer);
   wasm._free(fieldsPointer);
   wasm._free(namePointer);
   componentNames[id] = name;
-  const registered = id as Component<unknown>;
+  const registered = id as Component<unknown, "direct">;
   registerComponentSetter(registered, componentLayout(registered));
   return registered;
 }
@@ -162,14 +168,16 @@ export function reflectType(type: bigint): ReflectedTypeLayout {
     }
 
     layout.fields = fields;
-  } else if (kind === 17) {
+  } else if (kind === 17 || kind === 18) {
     layout.element = reflectType(wasm._siecs_ts_type_element(type));
-    layout.count = wasm._siecs_ts_type_element_count(type);
+    if (kind === 17) layout.count = wasm._siecs_ts_type_element_count(type);
   }
 
   return layout;
 }
 
-export function componentLayout(component: Component): ReflectedTypeLayout {
+export function componentLayout(
+  component: Component<unknown, ComponentMutation>,
+): ReflectedTypeLayout {
   return reflectType(wasm._siecs_ts_component_type(component));
 }

@@ -29,7 +29,7 @@ try {
       "-sWASM_BIGINT=1",
       "-sALLOW_MEMORY_GROWTH=1",
       "-sALLOW_TABLE_GROWTH=1",
-      "-sEXPORTED_RUNTIME_METHODS=addFunction",
+      "-sEXPORTED_RUNTIME_METHODS=addFunction,stackSave,stackAlloc,stackRestore",
       "-sENVIRONMENT=web,node",
       "-sASSERTIONS=0",
       "-sSINGLE_FILE=1",

@@ -1,4 +1,8 @@
-import { type Component, componentLayout } from "./component.js";
+import {
+  type Component,
+  type ComponentMutation,
+  componentLayout,
+} from "./component.js";
 import { Entity } from "./entity.js";
 import {
   type Resource,
@@ -14,7 +18,8 @@ declare const writeBrand: unique symbol;
 declare const filterBrand: unique symbol;
 declare const withoutBrand: unique symbol;
 
-export type AccessTarget = Component | Resource;
+export type AccessTarget = Component<unknown, "direct" | "set-only"> | Resource;
+type WritableAccessTarget = Component<unknown, "direct"> | Resource;
 
 export interface Write<Target extends AccessTarget = AccessTarget> {
   readonly target: Target;
@@ -47,7 +52,7 @@ type TargetOf<Term> = Term extends Write<infer Target>
         ? Term
         : never;
 
-type DataOf<Term> = TargetOf<Term> extends Component<infer Data>
+type DataOf<Term> = TargetOf<Term> extends Component<infer Data, ComponentMutation>
   ? Data
   : TargetOf<Term> extends Resource<infer Data>
     ? Data
@@ -110,7 +115,7 @@ export interface AccessPlan {
   readonly componentFields: ComponentField[];
 }
 
-export function write<const Target extends AccessTarget>(
+export function write<const Target extends WritableAccessTarget>(
   target: Target,
 ): Write<Target> {
   return { target, access: 2 } as Write<Target>;

@@ -1,17 +1,16 @@
 import type {
   Component,
+  ComponentMutation,
   ComponentValue,
   ReflectedTypeLayout,
 } from "./component.js";
 import { wasm } from "./runtime.js";
 
 type Setter = (entity: bigint, value: unknown) => void;
-type ValueSetter = (value: unknown) => void;
+type ValueSetter = (pointer: number, value: unknown) => void;
 
 export const componentSetters: Setter[] = [];
 const directComponentSetters: Setter[] = [];
-const notifyingComponentSetters: Setter[] = [];
-let notifyOnSet = false;
 
 interface Storage {
   heap: string;
@@ -109,10 +108,9 @@ function compileWrites(layout: ReflectedTypeLayout) {
   };
 }
 
-function compileComponentSetter(
-  component: Component,
+function compileDirectComponentSetter(
+  component: Component<unknown, ComponentMutation>,
   layout: ReflectedTypeLayout,
-  notifying: boolean,
 ): Setter {
   const compiled = compileWrites(layout);
 
@@ -123,50 +121,67 @@ function compileComponentSetter(
       const pointer=wasm._siecs_ts_ensure_cid(entity,component);
       ${compiled.heapLocals}
       ${compiled.writes}
-      ${notifying ? "wasm._ecs_modified_cid(entity,component);" : ""}
     }`,
-  ) as (wasm: typeof import("./runtime.js").wasm, component: Component) => Setter;
+  ) as (wasm: typeof import("./runtime.js").wasm, component: Component<unknown, ComponentMutation>) => Setter;
 
   return factory(wasm, component);
 }
 
 export function compileValueSetter(
-  pointer: number,
   layout: ReflectedTypeLayout,
 ): ValueSetter {
   const compiled = compileWrites(layout);
   const factory = new Function(
     "wasm",
-    "pointer",
-    `return function(value){
+    `return function(pointer,value){
       ${compiled.heapLocals}
       ${compiled.writes}
     }`,
-  ) as (wasm: typeof import("./runtime.js").wasm, pointer: number) => ValueSetter;
-  return factory(wasm, pointer);
+  ) as (wasm: typeof import("./runtime.js").wasm) => ValueSetter;
+  return factory(wasm);
 }
 
 export function registerComponentSetter(
-  component: Component,
+  component: Component<unknown, ComponentMutation>,
   layout: ReflectedTypeLayout,
 ) {
-  const direct = compileComponentSetter(component, layout, false);
-  const notifying = compileComponentSetter(component, layout, true);
+  const direct = compileDirectComponentSetter(component, layout);
+  const serialize = compileValueSetter(layout);
+  const size = Math.max(layout.size, 1);
+  const scratch = wasm._malloc(size);
+  let busy = false;
   directComponentSetters[component] = direct;
-  notifyingComponentSetters[component] = notifying;
-  componentSetters[component] = notifyOnSet ? notifying : direct;
+  componentSetters[component] = (entity, value) => {
+    if (!busy) {
+      busy = true;
+      try {
+        serialize(scratch, value);
+        wasm._ecs_set_cid(entity, component, scratch);
+      } finally {
+        busy = false;
+      }
+      return;
+    }
+
+    const stack = wasm.stackSave();
+    try {
+      const temporary = wasm.stackAlloc(size);
+      serialize(temporary, value);
+      wasm._ecs_set_cid(entity, component, temporary);
+    } finally {
+      wasm.stackRestore(stack);
+    }
+  };
 }
 
-export function setOnSetNotifications(enabled: boolean) {
-  if (notifyOnSet === enabled) return;
-  notifyOnSet = enabled;
-  const source = enabled ? notifyingComponentSetters : directComponentSetters;
-  for (let index = 0; index < source.length; index++) {
-    if (source[index]) componentSetters[index] = source[index]!;
-  }
+export function registerSetOnlyComponentSetter(
+  component: Component<unknown, ComponentMutation>,
+  setter: Setter,
+) {
+  componentSetters[component] = setter;
 }
 
-export function setComponent<ComponentType extends Component>(
+export function setComponent<ComponentType extends Component<unknown, ComponentMutation>>(
   entity: bigint,
   component: ComponentType,
   value: ComponentValue<ComponentType>,
@@ -174,7 +189,7 @@ export function setComponent<ComponentType extends Component>(
   componentSetters[component]!(entity, value);
 }
 
-export function directSetComponent<ComponentType extends Component>(
+export function directSetComponent<ComponentType extends Component<unknown, ComponentMutation>>(
   entity: bigint,
   component: ComponentType,
   value: ComponentValue<ComponentType>,

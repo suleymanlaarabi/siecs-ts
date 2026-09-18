@@ -2,11 +2,21 @@ export interface SiecsModule {
   _ecs_init(): void;
   _ecs_fini(): void;
   _ecs_new(): bigint;
+  _ecs_kill(entity: bigint): void;
+  _ecs_is_alive(entity: bigint): number;
+  _ecs_defer_begin(): void;
+  _ecs_defer_end(): void;
   _ecs_add_cid(entity: bigint, component: number): void;
   _ecs_has_cid(entity: bigint, component: number): number;
   _ecs_remove_cid(entity: bigint, component: number): void;
   _ecs_get_cid(entity: bigint, component: number): number;
   _ecs_modified_cid(entity: bigint, component: number): void;
+  _ecs_set_cid(entity: bigint, component: number, value: number): void;
+  _ecs_relate_id(entity: bigint, relation: number, target: bigint): void;
+  _ecs_unrelate_id(entity: bigint, relation: number): void;
+  _ecs_target_id(entity: bigint, relation: number): bigint;
+  _ecs_has_relation_id(entity: bigint, relation: number): number;
+  _ecs_entity_name(entity: bigint): number;
   _ecs_resource_rid(resource: number): number;
   _ecs_event(): number;
   _ecs_observer_trigger(entity: bigint, event: number, data: number): void;
@@ -20,6 +30,10 @@ export interface SiecsModule {
   _ecs_progress(): number;
   _ecs_iter_next(iter: number): number;
   _siecs_ts_component_init(name: number, fields: number): number;
+  _siecs_ts_builtin_name(): number;
+  _siecs_ts_builtin_disabled(): number;
+  _siecs_ts_builtin_childof(): number;
+  _siecs_ts_set_name(entity: bigint, value: number): void;
   _siecs_ts_resource_init(name: number, fields: number, type: number): number;
   _siecs_ts_ensure_cid(entity: bigint, component: number): number;
   _siecs_ts_component_type(component: number): bigint;
@@ -78,6 +92,9 @@ export interface SiecsModule {
   HEAPF64: Float64Array;
   UTF8ToString(pointer: number): string;
   addFunction(callback: (...args: never[]) => unknown, signature: string): number;
+  stackSave(): number;
+  stackAlloc(size: number): number;
+  stackRestore(pointer: number): void;
   [name: `_ecs_${string}`]: unknown;
 }
 

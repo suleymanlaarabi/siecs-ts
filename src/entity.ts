@@ -1,19 +1,33 @@
-import type { Component, ComponentValue } from "./component.js";
+import type { Component, ComponentMutation, ComponentValue } from "./component.js";
 import { wasm } from "./runtime.js";
+import type { Relation } from "./relation.js";
+import {
+  hasRelation,
+  relate,
+  target,
+  unrelate,
+} from "./relation.js";
+import { getName, setName } from "./name.js";
 import { componentSetters, setComponent } from "./set.js";
 
 export const add = wasm._ecs_add_cid as (
   entity: bigint,
-  component: Component,
+  component: Component<unknown, ComponentMutation>,
 ) => void;
 
-export const has = (entity: bigint, component: Component) =>
+export const has = (entity: bigint, component: Component<unknown, ComponentMutation>) =>
   wasm._ecs_has_cid(entity, component) !== 0;
 
 export const remove = wasm._ecs_remove_cid as (
   entity: bigint,
-  component: Component,
+  component: Component<unknown, ComponentMutation>,
 ) => void;
+
+export const kill = wasm._ecs_kill as (entity: bigint) => void;
+
+export function isAlive(entity: bigint): boolean {
+  return entity !== 0n && wasm._ecs_is_alive(entity) !== 0;
+}
 
 export function set<ComponentType extends Component>(
   entity: bigint,
@@ -30,21 +44,60 @@ export class Entity {
     this.entity = entity;
   }
 
-  add(...components: Component[]): Entity {
+  add(...components: Component<unknown, ComponentMutation>[]): Entity {
     components.forEach((cid) => add(this.entity, cid));
     return this;
   }
 
-  has(component: Component): boolean {
+  has(component: Component<unknown, ComponentMutation>): boolean {
     return has(this.entity, component);
   }
 
-  remove(...components: Component[]): Entity {
+  remove(...components: Component<unknown, ComponentMutation>[]): Entity {
     components.forEach((cid) => remove(this.entity, cid));
     return this;
   }
 
-  set<ComponentType extends Component>(
+  kill(): void {
+    kill(this.entity);
+  }
+
+  isAlive(): boolean {
+    return isAlive(this.entity);
+  }
+
+  relate(relation: Relation, targetEntity: Entity | bigint): this {
+    relate(
+      this.entity,
+      relation,
+      typeof targetEntity === "bigint" ? targetEntity : targetEntity.entity,
+    );
+    return this;
+  }
+
+  unrelate(relation: Relation): this {
+    unrelate(this.entity, relation);
+    return this;
+  }
+
+  target(relation: Relation): bigint {
+    return target(this.entity, relation);
+  }
+
+  hasRelation(relation: Relation): boolean {
+    return hasRelation(this.entity, relation);
+  }
+
+  setName(value: string): this {
+    setName(this.entity, value);
+    return this;
+  }
+
+  getName(): string {
+    return getName(this.entity);
+  }
+
+  set<ComponentType extends Component<unknown, ComponentMutation>>(
     component: ComponentType,
     value: ComponentValue<ComponentType>,
   ): Entity {
@@ -53,7 +106,7 @@ export class Entity {
   }
 }
 
-export const entity = (...components: Component[]) => {
+export const entity = (...components: Component<unknown, ComponentMutation>[]) => {
   const e = new Entity(wasm._ecs_new());
   e.add(...components);
   return e;

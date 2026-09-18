@@ -1,6 +1,7 @@
 export { array, component } from "./src/component.js";
 export type {
   Component,
+  ComponentMutation,
   ComponentData,
   ComponentField,
   ComponentSchema,
@@ -9,7 +10,21 @@ export type {
   ReflectedArray,
   SireflectTypes,
 } from "./src/component.js";
-export { add, entity, Entity, has, remove, set } from "./src/entity.js";
+export {
+  add,
+  entity,
+  Entity,
+  has,
+  isAlive,
+  kill,
+  remove,
+  set,
+} from "./src/entity.js";
+export { defer, deferBegin, deferEnd } from "./src/defer.js";
+export { hasRelation, relate, target, unrelate } from "./src/relation.js";
+export type { Relation } from "./src/relation.js";
+export { ChildOf, Disabled, Name } from "./src/builtins.js";
+export { getName, setName } from "./src/name.js";
 export { filter, without, write } from "./src/access.js";
 export type {
   AccessDescriptor,

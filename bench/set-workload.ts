@@ -1,11 +1,19 @@
 import {
   component,
+  defer,
   disableObserver,
   enableObserver,
   entity,
   observer,
   OnSet,
   set,
+  ChildOf,
+  hasRelation,
+  isAlive,
+  kill,
+  relate,
+  target,
+  unrelate,
 } from "../index.ts";
 import { wasm } from "../src/runtime.ts";
 import { directSetComponent } from "../src/set.ts";
@@ -39,6 +47,28 @@ export function runSetBenchmark(entityCount = 100_000) {
       ++value.value,
     );
   };
+  const deferred = () => {
+    value.value++;
+    defer(() => {
+      for (const object of entities) set(object, Value, value);
+    });
+  };
+  const absent = () => {
+    const object = entity().entity;
+    set(object, Value, value);
+    kill(object);
+  };
+  const outer = entity().entity;
+  const inner = entity().entity;
+  let reentering = false;
+  observer(OnSet, { value: Value }, (row) => {
+    if (!reentering && row.entity.entity === outer) {
+      reentering = true;
+      set(inner, Value, value);
+      reentering = false;
+    }
+  });
+  const reentrant = () => set(outer, Value, value);
 
   let observerCalls = 0;
   const changed = observer(OnSet, { value: Value }, () => observerCalls++);
@@ -51,14 +81,38 @@ export function runSetBenchmark(entityCount = 100_000) {
   const observedTime = measure(unified);
   disableObserver(changed);
 
+  const parent = entity().entity;
+  const relationEntity = entity().entity;
+  const relateTime = measure(() => relate(relationEntity, ChildOf, parent));
+  const retargetTime = measure(() => relate(relationEntity, ChildOf, parent));
+  const targetTime = measure(() => target(relationEntity, ChildOf));
+  const hasRelationTime = measure(() => hasRelation(relationEntity, ChildOf));
+  const unrelateTime = measure(() => unrelate(relationEntity, ChildOf));
+  const livenessEntity = entity().entity;
+  const isAliveTime = measure(() => isAlive(livenessEntity));
+  const killTime = measure(() => {
+    const object = entity().entity;
+    kill(object);
+  });
+
   return {
     entities: entityCount,
     direct: directTime,
     set: setTime,
     native: nativeTime,
     observed: observedTime,
+    deferred: measure(deferred),
+    absent: measure(absent),
+    reentrant: measure(reentrant),
     noObserverRatio: setTime / directTime,
     nativeRatio: setTime / nativeTime,
     observerCalls,
+    relate: relateTime,
+    retarget: retargetTime,
+    unrelate: unrelateTime,
+    target: targetTime,
+    hasRelation: hasRelationTime,
+    isAlive: isAliveTime,
+    kill: killTime,
   };
 }

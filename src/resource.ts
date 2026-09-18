@@ -68,9 +68,8 @@ export function resource<const Schema extends ComponentSchema>(
 
   const layout = reflectType(type);
   const pointer = wasm._ecs_resource_rid(id);
-  const setter = compileValueSetter(pointer, layout) as (
-    value: ComponentData<Schema>,
-  ) => void;
+  const write = compileValueSetter(layout);
+  const setter = (value: ComponentData<Schema>) => write(pointer, value);
   const value = {
     [resourceKind]: true,
     id,

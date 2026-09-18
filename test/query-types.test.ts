@@ -1,4 +1,5 @@
 import {
+  Name,
   component,
   entity,
   event,
@@ -30,6 +31,15 @@ if (false) {
   query({ position: write(Position) }).each((row) => {
     row.position.x = 1;
   });
+
+  query({ name: Name }).each((row) => {
+    const value: string = row.name.value;
+    // @ts-expect-error Name must be written through setName or set(Name, ...)
+    row.name.value = "Player";
+  });
+
+  // @ts-expect-error Name does not permit direct write query access
+  query({ name: write(Name) });
 
   query({ enemy: filter(Enemy) }).each((row) => {
     // @ts-expect-error filter terms are not exposed on the row

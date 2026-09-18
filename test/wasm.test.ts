@@ -12,6 +12,10 @@ test("retains all SIECS exports without a manual list", async () => {
   expect(typeof module._ecs_system_init).toBe("function");
   expect(typeof module._ecs_resource_init).toBe("function");
   expect(typeof module._ecs_modified_cid).toBe("function");
+  expect(typeof module._ecs_set_cid).toBe("function");
+  expect(typeof module._ecs_kill).toBe("function");
+  expect(typeof module._ecs_defer_begin).toBe("function");
+  expect(typeof module._ecs_relate_id).toBe("function");
   expect(typeof module._ecs_iter_next).toBe("function");
   expect(typeof module._siecs_ts_query_init).toBe("function");
   expect(typeof module._siecs_ts_query_iter).toBe("function");
@@ -20,4 +24,7 @@ test("retains all SIECS exports without a manual list", async () => {
   expect(typeof module._siecs_ts_system_init).toBe("function");
   expect(typeof module._siecs_ts_observer_init).toBe("function");
   expect(typeof module.addFunction).toBe("function");
+  expect(typeof module.stackSave).toBe("function");
+  expect(typeof module.stackAlloc).toBe("function");
+  expect(typeof module.stackRestore).toBe("function");
 });

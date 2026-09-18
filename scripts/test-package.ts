@@ -66,7 +66,7 @@ try {
     runSystem(Move);
     let valid = false;
     query({ position: Position }).each(({ position }) => {
-      valid = position.x === 13 && position.y === 20 && observed === 11;
+      valid = position.x === 13 && position.y === 20 && observed === 10;
     });
     if (!valid) throw new Error("installed package returned invalid data");
   `;

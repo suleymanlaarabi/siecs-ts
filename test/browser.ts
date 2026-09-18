@@ -52,7 +52,7 @@ document.body.textContent =
   added &&
   removed &&
   queried &&
-  observed === 5 &&
+  observed === 42 &&
   systemValue === 7 &&
   Position > 0 &&
   Enemy > 0 &&

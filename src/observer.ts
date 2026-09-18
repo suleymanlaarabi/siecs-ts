@@ -7,7 +7,6 @@ import {
 } from "./access.js";
 import { Entity } from "./entity.js";
 import { wasm } from "./runtime.js";
-import { setOnSetNotifications } from "./set.js";
 
 declare const eventBrand: unique symbol;
 declare const observerBrand: unique symbol;
@@ -42,7 +41,6 @@ export const OnRelationSet = 3 as unknown as Event<RelationEvent>;
 export const OnRelationRemove = 4 as unknown as Event<RelationEvent>;
 
 const payloadStacks = new Map<number, unknown[]>();
-let activeOnSetObservers = 0;
 
 function eventId(event: Event<unknown>): number {
   return event as unknown as number;
@@ -50,13 +48,6 @@ function eventId(event: Event<unknown>): number {
 
 function observerHandle(observer: Observer): ObserverHandle {
   return observer as ObserverHandle;
-}
-
-function updateOnSetObservers(delta: number) {
-  activeOnSetObservers += delta;
-  if (activeOnSetObservers === 0 || activeOnSetObservers === 1 && delta > 0) {
-    setOnSetNotifications(activeOnSetObservers !== 0);
-  }
 }
 
 export function event<Payload = void>(): Event<Payload> {
@@ -110,7 +101,6 @@ export function observer<
     callbackPointer,
   );
   if (components) wasm._free(components);
-  if (idOfEvent === 2) updateOnSetObservers(1);
   return { id, event: idOfEvent, enabled: true } as ObserverHandle;
 }
 
@@ -143,7 +133,6 @@ export function enableObserver(observer: Observer): void {
   if (value.enabled) return;
   value.enabled = true;
   wasm._ecs_observer_enable(value.id);
-  if (value.event === 2) updateOnSetObservers(1);
 }
 
 export function disableObserver(observer: Observer): void {
@@ -151,5 +140,4 @@ export function disableObserver(observer: Observer): void {
   if (!value.enabled) return;
   value.enabled = false;
   wasm._ecs_observer_disable(value.id);
-  if (value.event === 2) updateOnSetObservers(-1);
 }

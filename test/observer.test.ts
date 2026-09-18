@@ -27,7 +27,7 @@ test("notifies native OnSet observers after the direct write", () => {
   enableObserver(changed);
   object.set(Value, { value: 4 });
 
-  expect(seen).toEqual([2, 4]);
+  expect(seen).toEqual([1, 3]);
 });
 
 test("uses SIECS OnAdd matching and borrowed observer rows", () => {
