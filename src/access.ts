@@ -45,21 +45,23 @@ export interface Without<ComponentType extends Component = Component> {
 export type AccessTerm = AccessTarget | Write | Filter | Without;
 export type AccessDescriptor = Readonly<Record<string, AccessTerm>>;
 
-type TargetOf<Term> = Term extends Write<infer Target>
-  ? Target
-  : Term extends Filter<infer ComponentType>
-    ? ComponentType
-    : Term extends Without<infer ComponentType>
+type TargetOf<Term> =
+  Term extends Write<infer Target>
+    ? Target
+    : Term extends Filter<infer ComponentType>
       ? ComponentType
-      : Term extends AccessTarget
-        ? Term
-        : never;
+      : Term extends Without<infer ComponentType>
+        ? ComponentType
+        : Term extends AccessTarget
+          ? Term
+          : never;
 
-type DataOf<Term> = TargetOf<Term> extends Component<infer Data, ComponentMutation>
-  ? Data
-  : TargetOf<Term> extends Resource<infer Data>
+type DataOf<Term> =
+  TargetOf<Term> extends Component<infer Data, ComponentMutation>
     ? Data
-    : never;
+    : TargetOf<Term> extends Resource<infer Data>
+      ? Data
+      : never;
 
 export type DeepReadonly<Value> = Value extends
   | number
@@ -70,7 +72,9 @@ export type DeepReadonly<Value> = Value extends
   | undefined
   ? Value
   : Value extends readonly (infer Element)[]
-    ? ReadonlyArray<DeepReadonly<Element>> & { readonly length: Value["length"] }
+    ? ReadonlyArray<DeepReadonly<Element>> & {
+        readonly length: Value["length"];
+      }
     : { readonly [Key in keyof Value]: DeepReadonly<Value[Key]> };
 
 type ComponentKeys<Descriptor extends AccessDescriptor> = {
@@ -144,6 +148,10 @@ function decode(term: AccessTerm): Modifier {
   return { target: term as AccessTarget, access: 0 };
 }
 
+export function filters(...terms: Component[]): {} {
+  return { ...terms.map(filter) };
+}
+
 export function compileAccess(
   descriptor: AccessDescriptor,
   alwaysEntity = false,
@@ -158,7 +166,12 @@ export function compileAccess(
     const { target, access } = decode(term);
     if (isResource(target)) {
       resourceTerms.push(resourceId(target) | (access << 16));
-      const cursor = createView(resourceLayout(target), access === 2, false, resourceStrings(target));
+      const cursor = createView(
+        resourceLayout(target),
+        access === 2,
+        false,
+        resourceStrings(target),
+      );
       attachView(cursor, resourcePointer(target), resourceLayout(target).size);
       row[name] = cursor;
       continue;
@@ -168,14 +181,29 @@ export function compileAccess(
     componentTerms.push((component as number) | (access << 16));
     if (access < 5) {
       const layout = componentLayout(component);
-      const cursor = createView(layout, access === 2, alwaysEntity, component === Name);
+      const cursor = createView(
+        layout,
+        access === 2,
+        alwaysEntity,
+        component === Name,
+      );
       row[name] = cursor;
-      componentFields.push({ id: component, cursor, stride: layout.size, cache: new Map() });
+      componentFields.push({
+        id: component,
+        cursor,
+        stride: layout.size,
+        cache: new Map(),
+      });
     }
   }
 
-  if (componentTerms.length > abi.componentCapacity || resourceTerms.length > abi.resourceCapacity) {
-    throw new RangeError(`Native queries support at most ${abi.componentCapacity} component and ${abi.resourceCapacity} resource terms`);
+  if (
+    componentTerms.length > abi.componentCapacity ||
+    resourceTerms.length > abi.resourceCapacity
+  ) {
+    throw new RangeError(
+      `Native queries support at most ${abi.componentCapacity} component and ${abi.resourceCapacity} resource terms`,
+    );
   }
 
   let entity: Entity | undefined;
@@ -193,13 +221,20 @@ export function allocateTerms(terms: readonly number[]): Uint32Array | null {
 
 function rowCode(plan: AccessPlan) {
   return {
-    locals: plan.componentFields.map((_, index) => `const c${index}=fields[${index}].cursor;`).join(""),
-    batch: plan.componentFields.map((_, index) =>
-      `const p${index}=read.ptr(ptrs,${index * abi.pointerSize});` +
-      `const s${index}=((kinds>>>${index * 2})&3)===2?0:fields[${index}].stride;` +
-      `c${index}._view=columnView(fields[${index}].cache,p${index},s${index}?count*s${index}:fields[${index}].stride);`
-    ).join(""),
-    rows: plan.componentFields.map((_, index) => `c${index}._base=i*s${index};`).join(""),
+    locals: plan.componentFields
+      .map((_, index) => `const c${index}=fields[${index}].cursor;`)
+      .join(""),
+    batch: plan.componentFields
+      .map(
+        (_, index) =>
+          `const p${index}=read.ptr(ptrs,${index * abi.pointerSize});` +
+          `const s${index}=((kinds>>>${index * 2})&3)===2?0:fields[${index}].stride;` +
+          `c${index}._view=columnView(fields[${index}].cache,p${index},s${index}?count*s${index}:fields[${index}].stride);`,
+      )
+      .join(""),
+    rows: plan.componentFields
+      .map((_, index) => `c${index}._base=i*s${index};`)
+      .join(""),
   };
 }
 
@@ -218,41 +253,87 @@ function batchCode(plan: AccessPlan, invoke: string): string {
     }`;
 }
 
-export function compileQueryEach(query: number, storage: Uint8Array, plan: AccessPlan): (callback: (row: never) => void) => void {
-  if (!plan.componentTerms.length) return callback => callback(plan.row as never);
+export function compileQueryEach(
+  query: number,
+  storage: Uint8Array,
+  plan: AccessPlan,
+): (callback: (row: never) => void) => void {
+  if (!plan.componentTerms.length)
+    return (callback) => callback(plan.row as never);
   const code = rowCode(plan);
-  const factory = new Function("native", "read", "ptr", "columnView", "query", "storage", "row", "entity", "fields",
+  const factory = new Function(
+    "native",
+    "read",
+    "ptr",
+    "columnView",
+    "query",
+    "storage",
+    "row",
+    "entity",
+    "fields",
     `${code.locals}return function(callback){
       const iter=ptr(storage);
       native.siecs_ts_query_iter(query,iter);
       while(native.ecs_iter_next(iter)){
         ${batchCode(plan, "callback(row);")}
       }
-    }`
+    }`,
   );
-  return factory(native, read, ptr, columnView, query, storage, plan.row, plan.entity, plan.componentFields);
+  return factory(
+    native,
+    read,
+    ptr,
+    columnView,
+    query,
+    storage,
+    plan.row,
+    plan.entity,
+    plan.componentFields,
+  );
 }
 
-export interface SystemContext { readonly deltaTime: number; }
+export interface SystemContext {
+  readonly deltaTime: number;
+}
 
-export function compileSystemBatch(plan: AccessPlan, context: { deltaTime: number }, callback: (row: never, context: SystemContext) => void): (iter: number) => void {
+export function compileSystemBatch(
+  plan: AccessPlan,
+  context: { deltaTime: number },
+  callback: (row: never, context: SystemContext) => void,
+): (iter: number) => void {
   if (!plan.componentTerms.length) {
-    return iter => {
+    return (iter) => {
       context.deltaTime = read.f32(iter, abi.deltaTime);
       callback(plan.row as never, context);
     };
   }
   const code = rowCode(plan);
-  const factory = new Function("read", "columnView", "row", "entity", "fields", "context", "callback",
+  const factory = new Function(
+    "read",
+    "columnView",
+    "row",
+    "entity",
+    "fields",
+    "context",
+    "callback",
     `${code.locals}return function(iter){
       context.deltaTime=read.f32(iter,${abi.deltaTime});
       ${batchCode(plan, "callback(row,context);")}
-    }`
+    }`,
   );
-  return factory(read, columnView, plan.row, plan.entity, plan.componentFields, context, callback);
+  return factory(
+    read,
+    columnView,
+    plan.row,
+    plan.entity,
+    plan.componentFields,
+    context,
+    callback,
+  );
 }
 
 export function refreshObserverRow(plan: AccessPlan, entity: bigint): void {
   plan.entity!.entity = entity;
-  for (const field of plan.componentFields) field.cursor._base = native.ecs_get_cid(entity, field.id);
+  for (const field of plan.componentFields)
+    field.cursor._base = native.ecs_get_cid(entity, field.id);
 }

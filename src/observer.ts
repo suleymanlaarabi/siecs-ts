@@ -41,6 +41,16 @@ export const OnRelationSet = 3 as unknown as Event<RelationEvent>;
 export const OnRelationRemove = 4 as unknown as Event<RelationEvent>;
 
 const payloadStacks = new Map<number, unknown[]>();
+type NativeEventDecoder = (triggerData: number) => unknown;
+const nativeEventDecoders = new Map<number, () => NativeEventDecoder>();
+
+/** Internal bridge for native event payloads borrowed from SIECS callbacks. */
+export function registerNativeEventDecoder(
+  observedEvent: Event<unknown>,
+  createDecoder: () => NativeEventDecoder,
+): void {
+  nativeEventDecoders.set(eventId(observedEvent), createDecoder);
+}
 
 function eventId(event: Event<unknown>): number {
   return event as unknown as number;
@@ -72,6 +82,7 @@ export function observer<
     oldTarget: 0n,
     newTarget: 0n,
   };
+  const nativeDecoder = nativeEventDecoders.get(idOfEvent)?.();
   const nativeCallback = (eventPointer: number) => {
     const entity = read.u64(eventPointer, abi.eventEntity);
     refreshObserverRow(plan, entity);
@@ -83,6 +94,8 @@ export function observer<
       relationPayload.oldTarget = read.u64(trigger, abi.oldTarget);
       relationPayload.newTarget = read.u64(trigger, abi.newTarget);
       payload = relationPayload;
+    } else if (nativeDecoder) {
+      payload = nativeDecoder(read.ptr(eventPointer, abi.eventTrigger));
     } else if (idOfEvent > 4) {
       const stack = payloadStacks.get(idOfEvent);
       payload = stack?.[stack.length - 1];

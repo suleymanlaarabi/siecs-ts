@@ -19,7 +19,11 @@ import {
   system,
   write,
   Shadows,
+  component,
 } from "../index.ts";
+import { filters } from "../src/access.ts";
+
+const Rotate = component("rotate");
 
 try {
   setResource(Sky, { color: { r: 13, g: 18, b: 32, a: 255 } });
@@ -48,31 +52,36 @@ try {
     .set(Position3d, { x: 0, y: 2, z: 10 })
     .set(Rotation3d, { pitch: -0.12, yaw: 0, roll: 0 });
 
-  entity(Static)
+  entity(Rotate)
     .set(Position3d, { x: 0, y: -1.5, z: 0 })
     .set(Cuboid, { width: 12, height: 0.3, depth: 8 })
     .set(Color, { r: 70, g: 80, b: 105, a: 255 });
 
-  entity()
+  entity(Rotate)
     .set(Position3d, { x: -1.8, y: 0, z: 0 })
     .set(Cuboid, { width: 2, height: 2, depth: 2 })
     .set(Color, { r: 70, g: 175, b: 255, a: 255 })
     .set(Bloom, { intensity: 1.2 })
     .set(Rotation3d, { pitch: 0.2, yaw: 0, roll: 0 });
 
-  entity(Static)
+  entity(Rotate)
     .set(Position3d, { x: 1.8, y: 0, z: -1 })
     .set(Cuboid, { width: 2, height: 2, depth: 2 })
     .set(Color, { r: 255, g: 130, b: 75, a: 255 })
     .set(Bloom, { intensity: 0.6 });
 
   system({
-    query: { rotation: write(Rotation3d), cuboid: Cuboid, keyboard: Keyboard },
+    query: {
+      rotation: write(Rotation3d),
+      keyboard: Keyboard,
+      ...filters(Cuboid, Rotate),
+    },
     each: ({ rotation, keyboard }, { deltaTime }) => {
       const direction = keyboard.keys[Key.Left] ? -1 : 1;
       rotation.yaw += deltaTime * direction;
     },
   });
+
   run();
 } finally {
   fini();

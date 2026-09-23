@@ -36,9 +36,10 @@
     "bench:query": "bun bench/query.ts",
     "bench:set": "bun bench/set.ts",
     "bench:system": "bun bench/system.ts",
+    "bench:interaction": "bun scripts/bench-native-interaction.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun run build:native && bun test",
-    "check": "bun run build && bun run typecheck && bun test && bun scripts/test-package.ts",
+    "check": "bun run build && bun run typecheck && bun scripts/test-native-interaction.ts && bun test && bun scripts/test-package.ts",
     "prepack": "bun run build && bun run typecheck && bun test && bun scripts/test-package.ts",
     "build:native": "bun scripts/build-native.ts",
     "example:3d": "bun examples/rendering.ts"

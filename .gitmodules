@@ -1,0 +1,4 @@
+[submodule "siecs"]
+	path = siecs
+	url = git@github.com:suleymanlaarabi/siecs.git
+	branch = main

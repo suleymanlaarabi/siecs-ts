@@ -195,6 +195,18 @@ void sigpu_static_upload(const sigpu_static_upload_t *upload) {
     const Uint32 rotated_size = upload->rotated_count * sizeof(sigpu_rotated_instance_t);
     const Uint32 transfer_size = axis_size + rotated_size;
 
+    if (g_sigpu.static_axis_buffer) {
+        SDL_ReleaseGPUBuffer(g_sigpu.device, g_sigpu.static_axis_buffer);
+        g_sigpu.static_axis_buffer = NULL;
+    }
+    if (g_sigpu.static_rotated_buffer) {
+        SDL_ReleaseGPUBuffer(g_sigpu.device, g_sigpu.static_rotated_buffer);
+        g_sigpu.static_rotated_buffer = NULL;
+    }
+    SDL_free(g_sigpu.static_chunks);
+    g_sigpu.static_chunks = NULL;
+    g_sigpu.static_chunk_count = 0;
+
     if (axis_size) {
         g_sigpu.static_axis_buffer = create_static_buffer(axis_size);
     }

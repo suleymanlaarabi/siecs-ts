@@ -15,6 +15,11 @@ typedef struct {
     uint8_t a;
 } sigpu_color_t;
 
+typedef struct {
+    float ox, oy, oz;
+    float dx, dy, dz;
+} sigpu_ray_t;
+
 #define sigpu_rgba(r, g, b, a) ((sigpu_color_t){ r, g, b, a })
 #define sigpu_rgb(r, g, b) sigpu_rgba(r, g, b, 255)
 
@@ -23,6 +28,7 @@ void sigpu_fini(void);
 
 bool sigpu_begin_frame(void);
 void sigpu_end_frame(void);
+bool sigpu_pointer_ray(float window_x, float window_y, sigpu_ray_t *out);
 
 void sigpu_camera(
     float x,

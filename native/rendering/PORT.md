@@ -29,10 +29,12 @@ SPIR-V files and may be relocated with the package.
 `siecs_ts_rendering_resource_id(name)` and
 `siecs_ts_rendering_resource_type(name)` resolve singleton IDs and reflected
 types. Unknown names return zero. Resource writes through SIECS invoke the
-original native setting hooks. Keyboard is filled in PreUpdate. Camera,
-static collection and shadow bounds execute in PreRender; culling and dynamic
-collection in OnRender; GPU submission in PostRender. `ecs_at_fini` releases
-GPU/SDL state and resets the static cache for another world.
+original native setting hooks. Input owns the sole SDL event pump and fills
+Keyboard/Pointer in PreUpdate; BeginRendering follows it and is GPU-only.
+Camera, pointer interaction, static collection and shadow bounds execute in
+PreRender; culling and dynamic collection in OnRender; GPU submission in
+PostRender. `ecs_at_fini` releases GPU/SDL state and resets the static cache
+for another world.
 
 ## Validation
 

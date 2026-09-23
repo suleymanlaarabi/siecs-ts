@@ -1,12 +1,18 @@
 #include "rendering.h"
 #include "sigpu_internal.h"
+#include "../input/input.h"
+#include "../interaction/interaction.h"
 #include <siecs_spatial.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 
 static const int default_multisampling = 4;
-// Static renderables are immutable after their first PreRender snapshot.
+/*
+ * Static renderables are uploaded once and remain free of per-frame ECS work.
+ * An explicit set of a render-affecting component invalidates the whole static
+ * cache; invalidations in one frame are coalesced into one PreRender rebuild.
+ */
 static const float static_chunk_size = 64.0f;
 _Static_assert(sizeof(sigpu_shared_axis_instance_t) == 24, "shared axis instance layout");
 _Static_assert(sizeof(sigpu_shared_rotated_instance_t) == 32, "shared rotated instance layout");
@@ -33,28 +39,9 @@ typedef struct {
 static static_item *static_items;
 static size_t static_items_count, static_items_capacity;
 static bool static_cache_ready;
+static bool static_cache_dirty;
 static ecs_system_id_t static_collect_system;
 static ecs_system_id_t static_finish_system;
-
-static const sireflect_enum_desc_t engine_key_reflection = {
-    .name = "EngineKey",
-    .values = "{ "
-              "A = 0, "
-              "D = 1, "
-              "W = 2, "
-              "S = 3, "
-              "Q = 4, "
-              "Z = 5, "
-              "E = 6, "
-              "Left = 7, "
-              "Right = 8, "
-              "Up = 9, "
-              "Down = 10, "
-              "Space = 11, I = 12 "
-              "}",
-    .size = sizeof(EngineKey),
-    .align = _Alignof(EngineKey),
-};
 
 static sigpu_color_t to_sigpu(Color color) { return (sigpu_color_t){ color.r, color.g, color.b, color.a }; }
 
@@ -299,8 +286,27 @@ static int static_item_less(const void *a, const void *b) {
     return (int)left->kind - (int)right->kind;
 }
 
+static void static_cuboid_on_set(ecs_observer_event_t *event) {
+    const ecs_component_t component = event->component;
+
+    if (component != ecs_id(Position3d) && component != ecs_id(Rotation3d) &&
+        component != ecs_id(Scale3d) && component != ecs_id(Cuboid) &&
+        component != ecs_id(Color) && component != ecs_id(Bloom)) {
+        return;
+    }
+
+    /* The initial snapshot will already include mutations made before it. */
+    if (!static_cache_ready || static_cache_dirty) {
+        return;
+    }
+
+    static_cache_dirty = true;
+    ecs_system_enable(static_collect_system);
+    ecs_system_enable(static_finish_system);
+}
+
 static void collect_static_cuboids(ecs_iter_t *it) {
-    if (static_cache_ready) {
+    if (static_cache_ready && !static_cache_dirty) {
         return;
     }
 
@@ -350,7 +356,7 @@ static void collect_static_cuboids(ecs_iter_t *it) {
 }
 
 static void finish_static_cache(ecs_iter_t *it) {
-    if (static_cache_ready) {
+    if (static_cache_ready && !static_cache_dirty) {
         return;
     }
 
@@ -431,6 +437,7 @@ static void finish_static_cache(ecs_iter_t *it) {
     static_items = NULL;
     static_items_count = static_items_capacity = 0;
     static_cache_ready = true;
+    static_cache_dirty = false;
     ecs_system_disable(static_collect_system);
     ecs_system_disable(static_finish_system);
 }
@@ -455,6 +462,16 @@ static ecs_system_id_t register_static_cache(ecs_system_id_t camera_system) {
         .main_thread_only = true,
     };
     static_collect_system = ecs_system_init(&collect);
+    ecs_observer({
+        .on = EcsOnSet,
+        .query = {
+            .components = {
+                ecs_filter(Static),
+                ecs_in_optional(Abstract),
+            },
+        },
+        .callback = static_cuboid_on_set,
+    });
     ecs_system_desc_t finish = {
         .name = "FinishStaticCuboids",
         .callback = finish_static_cache,
@@ -643,7 +660,6 @@ ECS_RESOURCE_DEFINE(Fog, .on_set = set_fog);
 ECS_RESOURCE_DEFINE(Shadows, .on_set = set_shadows);
 ECS_RESOURCE_DEFINE(Multisampling, .on_set = set_multisampling);
 ECS_RESOURCE_DEFINE(BloomSettings, .on_set = set_bloom);
-ECS_RESOURCE_DEFINE(Keyboard);
 
 #define RESOURCE_REFLECTION(rname, ...) \
     static const sireflect_struct_desc_t reflection_##rname = { \
@@ -658,7 +674,6 @@ RESOURCE_REFLECTION(Fog, { Color color; float start; float end; });
 RESOURCE_REFLECTION(Shadows, { bool enabled; float distance; });
 RESOURCE_REFLECTION(Multisampling, { int samples; });
 RESOURCE_REFLECTION(BloomSettings, { bool enabled; float threshold; float intensity; });
-RESOURCE_REFLECTION(Keyboard, { bool keys[13]; });
 #undef RESOURCE_REFLECTION
 
 typedef struct {
@@ -672,26 +687,15 @@ typedef struct {
 static rendering_resource rendering_resources[] = {
     RESOURCE_ENTRY(WindowConfig), RESOURCE_ENTRY(Sky), RESOURCE_ENTRY(Sun),
     RESOURCE_ENTRY(AmbientLight), RESOURCE_ENTRY(Fog), RESOURCE_ENTRY(Shadows),
-    RESOURCE_ENTRY(Multisampling), RESOURCE_ENTRY(BloomSettings), RESOURCE_ENTRY(Keyboard),
+    RESOURCE_ENTRY(Multisampling), RESOURCE_ENTRY(BloomSettings),
 };
 #undef RESOURCE_ENTRY
 
 char *g_sigpu_shader_directory;
 
 static void begin_rendering(ecs_iter_t *it) {
-    Keyboard *keyboard = ecs_get_resource(Keyboard);
     if (!sigpu_begin_frame()) {
         ecs_quit();
-    }
-    static const SDL_Scancode scancodes[] = {
-        SDL_SCANCODE_A, SDL_SCANCODE_D, SDL_SCANCODE_W, SDL_SCANCODE_S,
-        SDL_SCANCODE_Q, SDL_SCANCODE_Z, SDL_SCANCODE_E, SDL_SCANCODE_LEFT,
-        SDL_SCANCODE_RIGHT, SDL_SCANCODE_UP, SDL_SCANCODE_DOWN, SDL_SCANCODE_SPACE,
-        SDL_SCANCODE_I,
-    };
-    const bool *state = SDL_GetKeyboardState(NULL);
-    for (size_t index = 0; index < KeyCount; index++) {
-        keyboard->keys[index] = state[scancodes[index]];
     }
 }
 
@@ -723,13 +727,13 @@ static void fini_rendering(void *data) {
     static_items = NULL;
     static_items_count = static_items_capacity = 0;
     static_cache_ready = false;
+    static_cache_dirty = false;
     static_collect_system = static_finish_system = 0;
     /* The source renderer has global GPU state; reset it for a subsequent world. */
     SDL_memset(&g_sigpu, 0, sizeof(g_sigpu));
 }
 
 void siecs_ts_rendering_init(const char *shader_directory) {
-    sireflect_register_enum(&engine_key_reflection);
     ECS_MODULE_IMPORT(sispatial, { 0 });
     ECS_COMPONENT_REGISTER(Color, Cuboid, Bloom, Camera);
     for (size_t index = 0; index < sizeof(rendering_resources) / sizeof(*rendering_resources); index++) {
@@ -741,6 +745,7 @@ void siecs_ts_rendering_init(const char *shader_directory) {
     const WindowConfig *window = ecs_get_resource_read(WindowConfig);
     g_sigpu_shader_directory = SDL_strdup(shader_directory);
     sigpu_init(window->title, window->width, window->height, default_multisampling);
+    siecs_ts_input_init();
     ecs_set_resource(Sky, { .color = { 13, 13, 20, 255 } });
     ecs_set_resource(Sun, { .x = -1.0f, .y = -2.0f, .z = 1.0f,
         .color = { 255, 245, 220, 255 }, .intensity = 1.0f });
@@ -749,10 +754,9 @@ void siecs_ts_rendering_init(const char *shader_directory) {
     ecs_set_resource(Shadows, { .enabled = false, .distance = 35.0f });
     ecs_set_resource(Multisampling, { .samples = default_multisampling });
     ecs_set_resource(BloomSettings, { .enabled = true, .threshold = 0.0f, .intensity = 1.0f });
-    ecs_set_resource(Keyboard, { 0 });
+    const ecs_system_id_t input_system = siecs_ts_input_system();
     ecs_system({
-        .name = "BeginRendering", .phase = EcsPreUpdate,
-        .query.resources = { { .id = ecs_id(Keyboard), .access = EcsInOut } },
+        .name = "BeginRendering", .phase = EcsPreUpdate, .after = { input_system },
         .callback = begin_rendering, .main_thread_only = true, .no_defer = true,
     });
     const ecs_system_id_t camera_system = ecs_system({
@@ -764,6 +768,7 @@ void siecs_ts_rendering_init(const char *shader_directory) {
         },
         .callback = update_camera, .main_thread_only = true,
     });
+    siecs_ts_interaction_init(camera_system);
     const ecs_system_id_t static_cache_system = register_static_cache(camera_system);
     register_shadow_bounds(static_cache_system);
     register_render_cuboids();

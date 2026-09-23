@@ -1,4 +1,4 @@
-#include "../siecs/siecs.h"
+#include <siecs.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>

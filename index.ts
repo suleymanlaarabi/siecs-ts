@@ -26,6 +26,22 @@ export { hasRelation, relate, target, unrelate } from "./src/relation.js";
 export type { Relation } from "./src/relation.js";
 export { Abstract, ChildOf, Disabled, IsA, Name } from "./src/builtins.js";
 export * from "./src/rendering.js";
+export * from "./src/input.js";
+export {
+  PointerEvents,
+  PointerEventMask,
+  PointerEnter,
+  PointerLeave,
+  PointerMove,
+  PointerDown,
+  PointerUp,
+  PointerCancel,
+  Click,
+  Press,
+  Wheel,
+  setPointerEvents,
+} from "./src/interaction.js";
+export type { PointerEventData } from "./src/interaction.js";
 export { getName, setName } from "./src/name.js";
 export { filter, without, write } from "./src/access.js";
 export type {

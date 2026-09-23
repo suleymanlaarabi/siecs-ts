@@ -6,7 +6,12 @@ import {
   compileAccess,
   compileSystemBatch,
 } from "./access.js";
-import { abi, fini as closeRuntime, native, registerCallback } from "./runtime.js";
+import {
+  abi,
+  fini as closeRuntime,
+  native,
+  registerCallback,
+} from "./runtime.js";
 
 declare const phaseBrand: unique symbol;
 declare const systemBrand: unique symbol;
@@ -58,8 +63,6 @@ export function phase(name: string, options: PhaseOptions = {}): Phase {
   return id as Phase;
 }
 
-type SystemDesc = {};
-
 export function system<const Descriptor extends AccessDescriptor>({
   name = "Unknown",
   query = {} as Descriptor,
@@ -74,7 +77,9 @@ export function system<const Descriptor extends AccessDescriptor>({
   const plan = compileAccess(query);
   const dependencies = options.after ?? [];
   if (dependencies.length > abi.afterCapacity) {
-    throw new RangeError(`Native systems support at most ${abi.afterCapacity} dependencies`);
+    throw new RangeError(
+      `Native systems support at most ${abi.afterCapacity} dependencies`,
+    );
   }
   const context = { deltaTime: 0 };
   const batch = compileSystemBatch(
@@ -85,7 +90,9 @@ export function system<const Descriptor extends AccessDescriptor>({
   const callbackPointer = registerCallback(batch);
   const components = allocateTerms(plan.componentTerms);
   const resources = allocateTerms(plan.resourceTerms);
-  const after = dependencies.length ? new Uint16Array(dependencies.map(systemId)) : null;
+  const after = dependencies.length
+    ? new Uint16Array(dependencies.map(systemId))
+    : null;
 
   const id = native.siecs_ts_system_init(
     name,
