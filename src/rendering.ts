@@ -62,6 +62,11 @@ export const Cuboid = nativeComponent("Cuboid", {
   height: "f32",
   depth: "f32",
 });
+export const Cylinder = nativeComponent("Cylinder", {
+  radius: "f32",
+  height: "f32",
+});
+export const Sphere = nativeComponent("Sphere", { radius: "f32" });
 export const Bloom = nativeComponent("Bloom", { intensity: "f32" });
 export const Camera = nativeComponent("Camera", { fov: "f32" });
 
