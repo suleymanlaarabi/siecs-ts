@@ -50,6 +50,8 @@ DECLARE_FIELD(GlobalPosition3d);
 DECLARE_FIELD(GlobalOrientation3d);
 DECLARE_FIELD(GlobalScale3d);
 DECLARE_FIELD(Cuboid);
+DECLARE_FIELD(Cylinder);
+DECLARE_FIELD(Sphere);
 DECLARE_FIELD(Color);
 DECLARE_FIELD(Bloom);
 #define FIELD(T, it, index) ((field_##T){ ecs_field(it,index), ecs_field_is_shared(it,index) ? 0 : 1 })
@@ -650,6 +652,8 @@ static void set_bloom(const void *ptr) {
 
 ECS_COMPONENT_DEFINE(Color, .inheritance = EcsInheritShared);
 ECS_COMPONENT_DEFINE(Cuboid, .inheritance = EcsInheritShared);
+ECS_COMPONENT_DEFINE(Cylinder, .inheritance = EcsInheritShared);
+ECS_COMPONENT_DEFINE(Sphere, .inheritance = EcsInheritShared);
 ECS_COMPONENT_DEFINE(Bloom, .inheritance = EcsInheritShared);
 ECS_COMPONENT_DEFINE(Camera);
 ECS_RESOURCE_DEFINE(WindowConfig);
@@ -735,7 +739,7 @@ static void fini_rendering(void *data) {
 
 void siecs_ts_rendering_init(const char *shader_directory) {
     ECS_MODULE_IMPORT(sispatial, { 0 });
-    ECS_COMPONENT_REGISTER(Color, Cuboid, Bloom, Camera);
+    ECS_COMPONENT_REGISTER(Color, Cuboid, Cylinder, Sphere, Bloom, Camera);
     for (size_t index = 0; index < sizeof(rendering_resources) / sizeof(*rendering_resources); index++) {
         rendering_resource *resource = &rendering_resources[index];
         ecs_resource_register(resource->id, resource->desc);
@@ -779,7 +783,8 @@ void siecs_ts_rendering_init(const char *shader_directory) {
 
 uint16_t siecs_ts_rendering_component_id(const char *name) {
 #define COMPONENT_ID(type) if (strcmp(name, #type) == 0) return ecs_id(type)
-    COMPONENT_ID(Color); COMPONENT_ID(Cuboid); COMPONENT_ID(Bloom); COMPONENT_ID(Camera);
+    COMPONENT_ID(Color); COMPONENT_ID(Cuboid); COMPONENT_ID(Cylinder); COMPONENT_ID(Sphere);
+    COMPONENT_ID(Bloom); COMPONENT_ID(Camera);
     COMPONENT_ID(Position2d); COMPONENT_ID(Velocity2d); COMPONENT_ID(GlobalPosition2d);
     COMPONENT_ID(Scale2d); COMPONENT_ID(GlobalScale2d); COMPONENT_ID(Rotation2d);
     COMPONENT_ID(GlobalRotation2d); COMPONENT_ID(Position3d); COMPONENT_ID(Velocity3d);

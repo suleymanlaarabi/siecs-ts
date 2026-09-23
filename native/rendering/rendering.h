@@ -3,6 +3,8 @@
 #include <siecs.h>
 ECS_COMPONENT_DECLARE(Color, { uint8_t r; uint8_t g; uint8_t b; uint8_t a; });
 ECS_COMPONENT_DECLARE(Cuboid, { float width; float height; float depth; });
+ECS_COMPONENT_DECLARE(Cylinder, { float radius; float height; });
+ECS_COMPONENT_DECLARE(Sphere, { float radius; });
 ECS_COMPONENT_DECLARE(Bloom, { float intensity; });
 ECS_COMPONENT_DECLARE(Camera, { float fov; });
 ECS_RESOURCE_DECLARE(WindowConfig, { int width; int height; const char *title; });
